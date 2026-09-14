@@ -258,6 +258,6 @@ The Xcode navigator mirrors this directory through a synchronized folder. Add SD
 
 For local development, open `payHereSDK.xcodeproj` and run the `demoapp` scheme. The demo uses the Swift package from this checkout, including its resources.
 
-Open `payHereSDK.xcodeproj` and run the `payHereSDK-Tests` scheme on an iOS Simulator. Xcode resolves the Swift package dependencies when the project opens. The suite uses `demoapp` as its host for UIKit presentation, result configuration, dismissal, and request-failure tests. SDK requests are intercepted with local responses; these tests do not submit real payments.
+Open `payHereSDK.xcodeproj` and run the `payHereSDK-Tests` scheme on an iOS Simulator. Xcode resolves the Swift package dependencies when the project opens. The suite uses `demoapp` as its host for UIKit presentation, result configuration, dismissal, and retry tests. SDK requests are intercepted with local responses; these tests do not submit real payments.
 
 Package-only test runs can execute the configuration and lifecycle tests. UIKit integration tests require the app host and are explicitly skipped without one.

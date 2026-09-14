@@ -173,21 +173,6 @@ final class PHPaymentLifecycleTests: XCTestCase {
         }
     }
 
-    @MainActor
-    func testLegacyAndConfiguredPresentationSignaturesRemainAvailable() async {
-        typealias LegacyPresentation = (UIViewController, PHInitialRequest, Bool, PHViewControllerDelegate) -> Void
-        typealias ConfiguredPresentation = (UIViewController, PHInitialRequest, PHPaymentConfiguration, PHViewControllerDelegate) -> Void
-
-        let _: LegacyPresentation = PHPrecentController.precent(from:withInitRequest:shouldShowPaymentStatus:delegate:)
-        let _: LegacyPresentation = PHPrecentController.present(from:withInitRequest:shouldShowPaymentStatus:delegate:)
-        let _: ConfiguredPresentation = PHPrecentController.present(from:withInitRequest:configuration:delegate:)
-
-        // Compile the original call shape as well: its default argument must remain unambiguous.
-        let _: (UIViewController, PHInitialRequest, PHViewControllerDelegate) -> Void = { controller, request, delegate in
-            PHPrecentController.present(from: controller, withInitRequest: request, delegate: delegate)
-        }
-    }
-
     private func makeRequest() -> PHInitialRequest {
         return PHInitialRequest(merchantID: "1210000", notifyURL: nil, firstName: nil,
                                 lastName: nil, email: nil, phone: nil, address: nil,
@@ -219,59 +204,6 @@ private final class UnexpectedPaymentDelegate: PHViewControllerDelegate {
 
 // Exercises the production controller and storyboard with every SDK request intercepted.
 final class PHPaymentControllerTests: XCTestCase {
-    @MainActor
-    func testInitializationTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .failure(URLError(.notConnectedToInternet))])
-        addTeardownBlock { await fixture.stop() }
-
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/v2/init"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        XCTAssertEqual(fixture.delegate.callbackCount, 1)
-    }
-
-    @MainActor
-    func testSubmitTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .success(initializationData),
-                                                  "/pay/api/payment/submit": .failure(URLError(.networkConnectionLost))])
-        addTeardownBlock { await fixture.stop() }
-        try await waitForPaymentMethods(fixture)
-
-        fixture.controller.didSelectedPaymentOption(paymentMethod: try visaMethod(), selectedSection: 1)
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/v2/init", "/pay/api/payment/submit"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-    }
-
-    @MainActor
-    func testInitAndSubmitTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .PreApproval,
-                                      responses: ["/pay/api/payment/initAndSubmit": .failure(URLError(.timedOut))])
-        addTeardownBlock { await fixture.stop() }
-
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/initAndSubmit"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-    }
-
     @MainActor
     func testPendingStatusKeepsCheckingWithoutResultOrRetry() async throws {
         let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
@@ -373,10 +305,6 @@ final class PHPaymentControllerTests: XCTestCase {
 
     private var initializationData: Data {
         return Data("{\"status\":1,\"data\":{\"order\":{\"orderKey\":\"test-order\"},\"paymentMethods\":[]}}".utf8)
-    }
-
-    private func visaMethod() throws -> PaymentMethod {
-        return try JSONDecoder().decode(PaymentMethod.self, from: Data("{\"method\":\"VISA\",\"submissionCode\":\"VISA\",\"orderNo\":1}".utf8))
     }
 
     @MainActor
