@@ -43,7 +43,8 @@ public class StatusResponse : Mappable{
     }
     
     public func getStatusState() -> Status?{
-        return Status(rawValue: status!)
+        guard let status = status else { return nil }
+        return Status(rawValue: status)
     }
     
     public enum Status : Int{

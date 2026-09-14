@@ -35,7 +35,7 @@ public class PHBottomViewController: UIViewController {
     
     
     //MARK: - Constants
-    private let net                                 : NetworkReachabilityManager    = NetworkReachabilityManager(host: "payhere.lk")!
+    private let net = NetworkReachabilityManager(host: "payhere.lk")!
     
     
     
@@ -44,14 +44,19 @@ public class PHBottomViewController: UIViewController {
     internal var isSandBoxEnabled                   : Bool                          = false
     internal var orgHeight                          : CGFloat                       = 0
     internal var keyBoardHeightMax                  : CGFloat                       = 0
-    internal var shouldShowSucessView               : Bool                          = true
+    internal var configuration = PHPaymentConfiguration()
+    internal var networkSession: Session = AF
     
     private var ignoreProgressBarInNextNavigation   : Bool                          = false
-    private var didHandlePaymentStatus              : Bool                          = false
-    private var count                               : Int                           = 5
+    private var lifecycle = PHPaymentLifecycle()
     private var statusResponse                      : StatusResponse?
     private var timer                               : Timer?
-    private var isBackPressed                       : Bool                          = false
+    private var statusTimer: Timer?
+    private var paymentRequest: DataRequest?
+    private var statusRequest: DataRequest?
+    private var requestID = UUID()
+    private var activeNavigation: WKNavigation?
+    private let navigationAttempts = NSMapTable<WKNavigation, NSUUID>.weakToStrongObjects()
     private var waitUntilPaymentUI                  : WaitUntil!
     private var initialBottomConstant               : CGFloat                       = 0
     
@@ -92,7 +97,7 @@ public class PHBottomViewController: UIViewController {
     
     // WEAK VAR
     internal weak var delegate : PHViewControllerDelegate?
-    private weak var alertController:UIAlertController?
+    private weak var cancellationAlert: UIAlertController?
     
     // MARK: - IBOutlets & Weak Views
     @IBOutlet private weak var progressBar: UIActivityIndicatorView!
@@ -237,13 +242,21 @@ public class PHBottomViewController: UIViewController {
     public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        bottomConstraint.constant = -height.constant
-        performInitialSteps()
+        if lifecycle.phase == .idle {
+            bottomConstraint.constant = -height.constant
+            performInitialSteps()
+        }
         
     }
     
     private func performInitialSteps(){
-        self.didHandlePaymentStatus = false
+        guard lifecycle.beginAttempt() != nil else { return }
+        cancelPendingWork()
+        self.statusResponse = nil
+        self.initResponse = nil
+        self.selectedPaymentOption = nil
+        self.selectedPaymentMethod = nil
+        self.ignoreProgressBarInNextNavigation = false
         self.progressBar.isHidden = true
         
         if apiMethod == .CheckOut{
@@ -251,7 +264,7 @@ public class PHBottomViewController: UIViewController {
         }
         
         self.handleNavigation(stepId: .Dashboard, sectionId: -1)
-        self.startProcess(selectedAPI: self.apiMethod)
+        self.startProcess()
     }
     
     @objc func keyboardWillShowFunction(notification: NSNotification) {
@@ -300,30 +313,68 @@ public class PHBottomViewController: UIViewController {
     }
     
     private func close(animate:Bool = true,and callback: (() -> Void)? = nil){
-        timer?.invalidate()
+        guard lifecycle.beginClosing() else { return }
+        cancelPendingWork()
+        view.isUserInteractionEnabled = false
         webView.scrollView.delegate = nil
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
         NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
+
+        let finish = {
+            guard self.lifecycle.finishClosing() else { return }
+            callback?()
+        }
+        let dismissPayment = {
+            if let presenter = self.presentingViewController {
+                // Dismiss the payment controller and any cancellation alert together.
+                presenter.dismiss(animated: animate, completion: finish)
+            } else {
+                finish()
+            }
+        }
         
         if animate {
             UIView.animate(withDuration: 0.3, delay: 0.0, options: .curveEaseOut) {
                 self.bottomConstraint.constant = -self.height.constant
                 self.view.layoutIfNeeded()
             }completion: { _ in
-                self.dismiss(animated: true) {
-                    DispatchQueue.main.async {
-                        callback?()
-                    }
-                }
+                dismissPayment()
             }
         }else {
-            dismiss(animated: false) {
-                callback?()
-            }
+            dismissPayment()
         }
 
     }
-    
+
+    private func cancelPendingWork() {
+        requestID = UUID()
+        net.stopListening()
+        timer?.invalidate()
+        timer = nil
+        statusTimer?.invalidate()
+        statusTimer = nil
+        paymentRequest?.cancel()
+        paymentRequest = nil
+        statusRequest?.cancel()
+        statusRequest = nil
+        activeNavigation = nil
+        webView?.stopLoading()
+    }
+
+    private func finishWithError(_ error: Error, animate: Bool = true) {
+        close(animate: animate) {
+            self.delegate?.onErrorReceived(error: error)
+        }
+    }
+
+    private func finishWithNetworkError(_ error: AFError, animate: Bool = true) {
+        let result = NSError(domain: "", code: error.responseCode ?? 0,
+                             userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? ""])
+        finishWithError(result, animate: animate)
+    }
+
     private func createInitRequest(phInitialRequest : PHInitialRequest) ->PHInitRequest{
         
         let initialSubmitRequest = PHInitRequest()
@@ -474,7 +525,7 @@ public class PHBottomViewController: UIViewController {
     
     
     
-    private func startProcess(selectedAPI : SelectedAPI){
+    private func startProcess(){
         
         self.viewPaymentSucess.isHidden = true
         self.progressBar.isHidden = false
@@ -483,7 +534,7 @@ public class PHBottomViewController: UIViewController {
         let validate = self.Validate()
         
         if(validate == nil){
-            checkNetworkAvailability(selectedAPI: selectedAPI);
+            checkNetworkAvailability()
         }else{
             close(animate: false) {
                 let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: validate as Any])
@@ -493,75 +544,54 @@ public class PHBottomViewController: UIViewController {
         
     }
     
-    private func checkNetworkAvailability(selectedAPI : SelectedAPI){
-        
-        var connection : Bool = false
-        
-        net.startListening(onUpdatePerforming: { [weak self] (status) in
-            guard let `self` = self else { return }
-            
-            if(self.net.isReachable){
-                
-                switch status{
-                case .reachable(.ethernetOrWiFi):
-                    connection = true
-                    
-                case .reachable(.cellular):
-                    connection = true
-                    
-                case .notReachable:
-                    connection = false
-                    
-                case .unknown :
-                    connection = false
-                    
-                }
-                
-                if (!connection) {
-                    
-                    self.close(animate: false) {
-                        let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Unable to connect to the internet"])
-                        self.delegate?.onErrorReceived(error: error)
-                    }
-                    
-                }else{
-                    
-                    if(self.apiMethod == .PreApproval || self.apiMethod == .Recurrence || self.apiMethod == .Authorize){
-                        self.tableView.isHidden = true
-                        self.progressBar.isHidden = true
-                        self.selectedPaymentOption = PaymentOption(name: "Visa", image: self.getImage(withImageName: "visa"), optionValue: "VISA")
-                        
-                        self.initRequest?.method = "VISA"
-                        self.sentInitNSubmitRequest()
-                    }else{
-                        self.handleNavigation(stepId: .Dashboard, sectionId: -1)
-                        self.sentInitRequest()
-                    }
-                    
+    private func checkNetworkAvailability() {
+        let attemptID = lifecycle.attemptID
+        net.startListening(onQueue: .main) { [weak self] status in
+            DispatchQueue.main.async {
+                guard let self = self, self.lifecycle.accepts(attemptID),
+                      self.paymentRequest == nil, self.initResponse == nil,
+                      self.net.isReachable else { return }
+                switch status {
+                case .reachable:
+                    self.beginInitialization()
+                case .notReachable, .unknown:
+                    self.finishWithError(NSError(domain: "", code: 401,
+                        userInfo: [NSLocalizedDescriptionKey: "Unable to connect to the internet"]), animate: false)
                 }
             }
-        })
+        }
     }
+
+    private func beginInitialization() {
+        net.stopListening()
+        if apiMethod == .PreApproval || apiMethod == .Recurrence || apiMethod == .Authorize {
+            selectedPaymentOption = PaymentOption(name: "Visa", image: getImage(withImageName: "visa"), optionValue: "VISA")
+            initRequest?.method = "VISA"
+            sentInitNSubmitRequest()
+        } else {
+            handleNavigation(stepId: .Dashboard, sectionId: -1)
+            sentInitRequest()
+        }
+    }
+
     
     @objc private func backButtonClicked(){
+        guard lifecycle.phase == .active else { return }
         
         if(apiMethod == .CheckOut && selectedPaymentOption != nil){
+            cancelPendingWork()
             
             self.selectedPaymentOption = nil
             self.selectedPaymentMethod = nil
             self.step = .Dashboard
             
-            self.animateChanges {
+            self.animateChanges(animationBlock: {
                 self.setInitialHeight()
-            } completion: {
-                self.webView.loadHTMLString("", baseURL: nil)
-                self.webView.stopLoading()
-            }
+            })
             
             self.webView.isHidden = true
             self.tableView.isHidden = false
             
-            self.isBackPressed = true
             self.progressBar.isHidden = true
             
             self.handleNavigation(stepId: .Dashboard, sectionId: -1)
@@ -573,22 +603,27 @@ public class PHBottomViewController: UIViewController {
     }
     
     @objc private func forceClose(){
+        guard lifecycle.phase == .active || lifecycle.phase == .result,
+              cancellationAlert == nil else { return }
+        let attemptID = lifecycle.attemptID
+        let phase = lifecycle.phase
         let alert = UIAlertController(
             title: "Cancel Payment?",
             message: "This payment is still being processed!",
             preferredStyle: .alert
         )
         
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: {_ in
-            // Cancel Occured
+        cancellationAlert = alert
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { [weak self] _ in
+            self?.cancellationAlert = nil
         }))
         
         alert.addAction(UIAlertAction(title: "Exit Now", style: .destructive) { [weak self] _ in
-            guard let `self` else { return }
+            guard let self = self, self.lifecycle.attemptID == attemptID,
+                  self.lifecycle.phase == phase else { return }
             // Force exit logic here
             let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Oparation cancelled!"])
-            self.delegate?.onErrorReceived(error: error)
-            self.close()
+            self.finishWithError(error)
         })
         
         self.present(alert, animated: true)
@@ -649,13 +684,10 @@ public class PHBottomViewController: UIViewController {
             
             if(velocity.y > 1000.0 || translation.y > threshold){
                 
-                self.bottomConstraint.constant = -self.height.constant
-                animateChanges(completion:  {
-                    self.close {
-                        let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Oparation cancelled!"])
-                        self.delegate?.onErrorReceived(error: error)
-                    }
-                })
+                self.close {
+                    let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Oparation cancelled!"])
+                    self.delegate?.onErrorReceived(error: error)
+                }
                 
             }else{
                 
@@ -665,201 +697,113 @@ public class PHBottomViewController: UIViewController {
         }
     }
     
-    private func sentInitRequest(){
-        
-        //TODO Submit And Init
-        isBackPressed = false
-        
-        self.progressBar.isHidden = false
-        self.webView.isHidden = true
-        //        self.collectionView.isHidden = true
-        
-        
-        let request = initRequest?.toRawRequest(url: "\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.INIT)")
-        
-        AF.request(request!)
-            .validate()
-            .responseString{response in
-                switch response.result{
-                case .success(let value):
-                    xprint(value)
-                case .failure(let error):
-                    xprint(error.localizedDescription)
-                }
-            }
-            .responseData { response in
-                
-                self.progressBar.isHidden = true
-                self.tableView.isHidden  = false
-                
+    private func sentInitRequest() {
+        guard lifecycle.phase == .active, paymentRequest == nil,
+              let request = initRequest?.toRawRequest(url: "\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.INIT)") else { return }
+        progressBar.startAnimating()
+        progressBar.isHidden = false
+        webView.isHidden = true
+        tableView.isHidden = true
+        let attemptID = lifecycle.attemptID
+        let operationID = UUID()
+        requestID = operationID
+        paymentRequest = networkSession.request(request).validate()
+        paymentRequest?.responseData(queue: .main) { [weak self] response in
+            DispatchQueue.main.async {
+                guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID else { return }
+                self.paymentRequest = nil
                 switch response.result {
                 case .success(let data):
-                    do{
-                        let  temp = try newJSONDecoder().decode(PHInitResponse.self, from: data)
-                        
-                        if(temp.status == 1){
-                            self.initResponse = temp
-                            self.progressBar.isHidden = true
-                            //                            self.collectionView.isHidden = true
-                            
-                            if(!self.isBackPressed){
-                                let paymentMethods = self.initResponse?.data?.paymentMethods ?? []
-                                self.initalizedUI(paymentMethods)
-                            }
-                            
-                        }else{
-                            self.close(animate: false) {
-                                let error = NSError(domain: "", code: 501, userInfo: [NSLocalizedDescriptionKey: temp.msg ?? ""])
-                                self.delegate?.onErrorReceived(error: error)
-                            }
+                    do {
+                        let result = try newJSONDecoder().decode(PHInitResponse.self, from: data)
+                        guard result.status == 1 else {
+                            self.finishWithError(NSError(domain: "", code: 501,
+                                                         userInfo: [NSLocalizedDescriptionKey: result.msg ?? ""]), animate: false)
+                            return
                         }
-                        
-                        
-                    }catch let err{
-                        self.close(animate: false) {
-                            self.delegate?.onErrorReceived(error: err)
-                        }
+                        self.initResponse = result
+                        self.progressBar.isHidden = true
+                        self.tableView.isHidden = false
+                        self.initalizedUI(result.data?.paymentMethods ?? [])
+                    } catch {
+                        self.finishWithError(error, animate: false)
                     }
-                    
                 case .failure(let error):
-                    self.close(animate: false) {
-                        
-                        let err = NSError(domain: "", code: error.responseCode ?? 0, userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? ""])
-                        
-                        self.delegate?.onErrorReceived(error: err)
-                    }
+                    self.finishWithNetworkError(error, animate: false)
                 }
             }
-        
+        }
     }
+
     
-    private func sentInitNSubmitRequest(){
-        
-        //TODO Submit And Init
-        isBackPressed = false
-        
-        self.progressBar.isHidden = false
-        self.tableView.isHidden = true
-        
-        
-        xprint("Url :","\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.INITNSUBMIT)")
-        
-        let request = initRequest?.toRawRequest(url: "\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.INITNSUBMIT)")
-        
-        
-        AF.request(request!)
-            .validate()
-            .responseString{ response  in
-                switch response.result{
-                case .success(let data):
-                    xprint(data)
-                case .failure(let error):
-                    xprint(error)
-                }
-            }
-            .responseData { response in
-                
-                self.progressBar.isHidden = true
-                self.tableView.isHidden  = false
-                
+    private func sentInitNSubmitRequest() {
+        guard lifecycle.phase == .active, paymentRequest == nil,
+              let request = initRequest?.toRawRequest(url: "\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.INITNSUBMIT)") else { return }
+        progressBar.startAnimating()
+        progressBar.isHidden = false
+        tableView.isHidden = true
+        let attemptID = lifecycle.attemptID
+        let operationID = UUID()
+        requestID = operationID
+        paymentRequest = networkSession.request(request).validate()
+        paymentRequest?.responseData(queue: .main) { [weak self] response in
+            DispatchQueue.main.async {
+                guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID else { return }
+                self.paymentRequest = nil
                 switch response.result {
                 case .success(let data):
-                    do{
-                        let  temp = try newJSONDecoder().decode(PayHereInitnSubmitResponse.self, from: data)
-                        
-                        if(temp.status == 1){
-                            if self.initResponse == nil{
-                                self.initResponse = PHInitResponse(temp)
-                            }
-                            else{
-                                self.initResponse?.data?.order = temp.data?.order
-                            }
-                            self.progressBar.isHidden = true
-                            self.tableView.isHidden = true
-                            self.step = .Payment
-                            if(!self.isBackPressed){
-                                self.initWebView(temp)
-                            }
-                            
-                        }else{
-                            self.close(animate: false) {
-                                let error = NSError(domain: "", code: 501, userInfo: [NSLocalizedDescriptionKey: temp.msg ?? ""])
-                                self.delegate?.onErrorReceived(error: error)
-                            }
+                    do {
+                        let result = try newJSONDecoder().decode(PayHereInitnSubmitResponse.self, from: data)
+                        guard result.status == 1 else {
+                            self.finishWithError(NSError(domain: "", code: 501,
+                                                         userInfo: [NSLocalizedDescriptionKey: result.msg ?? ""]), animate: false)
+                            return
                         }
-                        
-                        
-                    }catch let err{
-                        self.close(animate: false) {
-                            self.delegate?.onErrorReceived(error: err)
-                        }
+                        self.initResponse = PHInitResponse(result)
+                        self.step = .Payment
+                        self.initWebView(result)
+                    } catch {
+                        self.finishWithError(error, animate: false)
                     }
-                    
                 case .failure(let error):
-                    self.close(animate: false) {
-                        
-                        let err = NSError(domain: "", code: error.responseCode ?? 0, userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? ""])
-                        
-                        self.delegate?.onErrorReceived(error: err)
-                    }
+                    self.finishWithNetworkError(error, animate: false)
                 }
             }
-        
+        }
     }
+
     
-    private func createSubmitRequest(method : String){
-        
+    private func createSubmitRequest(method: String) {
+        guard lifecycle.phase == .active, paymentRequest == nil,
+              let key = initResponse?.data?.order?.orderKey, !key.isEmpty else { return }
         let submitObject = SubmitRequest()
-        
         submitObject.method = method
-        submitObject.key = self.initResponse?.data?.order?.orderKey
-        
-        
+        submitObject.key = key
         let request = submitObject.toRawRequest(url: "\(PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL)\(PHConfigs.SUBMIT)")
-        
-        AF.request(request)
-            .validate()
-            .responseString{ response  in
-                switch response.result{
-                case .success(let data):
-                    xprint(data)
-                case .failure(let error):
-                    xprint(error)
-                }
-            }
-            .responseData { response in
-                guard self.step == .Payment else { return }
-                
+        let attemptID = lifecycle.attemptID
+        let operationID = UUID()
+        requestID = operationID
+        paymentRequest = networkSession.request(request).validate()
+        paymentRequest?.responseData(queue: .main) { [weak self] response in
+            DispatchQueue.main.async {
+                guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID,
+                      self.step == .Payment else { return }
+                self.paymentRequest = nil
                 switch response.result {
                 case .success(let data):
-                    do{
-                        let  temp = try newJSONDecoder().decode(PayHereSubmitResponse.self, from: data)
-                        
-                        if temp != nil{
-                            self.initWebView(temp)
-                        }
-                        
-                        
-                    }catch let err{
-                        self.close {
-                            self.delegate?.onErrorReceived(error: err)
-                        }
+                    do {
+                        let result = try newJSONDecoder().decode(PayHereSubmitResponse.self, from: data)
+                        self.initWebView(result)
+                    } catch {
+                        self.finishWithError(error)
                     }
-                    
-                    
                 case .failure(let error):
-                    self.close {
-                        
-                        let err = NSError(domain: "", code: error.responseCode ?? 0, userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? ""])
-                        
-                        self.delegate?.onErrorReceived(error: err)
-                    }
+                    self.finishWithNetworkError(error)
                 }
-                
             }
-        
-        
+        }
     }
+
     
     private func initalizedUI(_ paymentMethods : [PaymentMethod]){
         let bankCardMethods = ["MASTER", "VISA", "MASTER", "AMEX", "DISCOVER", "DINERS"]
@@ -907,86 +851,87 @@ public class PHBottomViewController: UIViewController {
             self.loadPayHereSubmitUI(url: url)
             
         }else{
-            self.close {
-                let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-                self.delegate?.onErrorReceived(error: error)
-            }
+            self.finishWithError(NSError(domain: "", code: 401,
+                                         userInfo: [NSLocalizedDescriptionKey: "Invalid URL"]))
         }
         
     }
     
     private func loadPayHereSubmitUI(url: String){
+        let attemptID = lifecycle.attemptID
+        let operationID = requestID
         self.tableView.isHidden         = true
         self.webView.isHidden           = true
         self.webView.uiDelegate         = self
         self.webView.navigationDelegate = self
         
         self.updateWebHeight {  [weak self] in
-            guard let `self` else {return}
+            guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID, self.step == .Payment else { return }
             self.reloadWebView(url: url)
         }
     }
     
     private func reloadWebView(url: String) {
-        if let URL = URL(string: url){
-            
-            let request = URLRequest(url: URL)
-            self.webView.load(request)
-            self.progressBar.isHidden = false
-            self.webView.isHidden = true
-            
-            
-        }else{
-            //MARK:TODO
-            //ERROR HANDLING
-            self.close {
-                let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-                self.delegate?.onErrorReceived(error: error)
+        if let url = URL(string: url) {
+            let request = URLRequest(url: url)
+            let navigation = webView.load(request)
+            activeNavigation = navigation
+            if let navigation = navigation {
+                navigationAttempts.setObject(requestID as NSUUID, forKey: navigation)
             }
+            progressBar.isHidden = false
+            webView.isHidden = true
+        } else {
+            finishWithError(NSError(domain: "", code: 401,
+                                   userInfo: [NSLocalizedDescriptionKey: "Invalid URL"]))
         }
     }
-    
+
     private func initWebView(_ submitResponse : PayHereInitnSubmitResponse){
         if let url = submitResponse.data?.redirection?.url{
  
             
             self.loadPayHereInitAndSubmitUI(url: url)
         }else{
-            self.close {
-                let error = NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-                self.delegate?.onErrorReceived(error: error)
-            }
+            self.finishWithError(NSError(domain: "", code: 401,
+                                         userInfo: [NSLocalizedDescriptionKey: "Invalid URL"]))
         }
         
     }
     
     private func loadPayHereInitAndSubmitUI(url: String){
+        let attemptID = lifecycle.attemptID
+        let operationID = requestID
         self.webView.isHidden = false
         
         self.webView.uiDelegate = self
         self.webView.navigationDelegate = self
         
         self.updateWebHeight {  [weak self] in
-            guard let `self` else {return}
+            guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID, self.step == .Payment else { return }
             self.reloadWebView(url: url)
         }
     }
      
     func updateWebHeight(completion: @escaping () -> Void) {
+        let attemptID = lifecycle.attemptID
+        let operationID = requestID
         
         let calculatedHeight = self.calculateWebHeight()
         
         
         
         DispatchQueue.main.async {  [weak self] in
+            guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID else { return }
             // Apply UI Changes
-            self?.animateChanges {
+            self.animateChanges {
                 
-                self?.height.constant = calculatedHeight
-                self?.orgHeight = calculatedHeight
+                self.height.constant = calculatedHeight
+                self.orgHeight = calculatedHeight
                 
             } completion: {
                 DispatchQueue.main.async{
+                    guard self.lifecycle.accepts(attemptID), self.requestID == operationID else { return }
                     completion()
                 }
             }
@@ -1058,63 +1003,55 @@ public class PHBottomViewController: UIViewController {
         return UIImage(named: withImageName, in: Bundle.payHereBundle, compatibleWith: nil)  ?? UIImage()
     }
     
-    private func startOrderStatusCheckTimer(){
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(timeInterval: 3, target: self, selector: #selector(orderStatusTimerTicked), userInfo: nil, repeats: true)
-    }
-    
-    private func checkStatus(orderKey: String, showProgress: Bool, _ completion: ((_ response: StatusResponse?) -> Void)? = nil){
-        
-        if showProgress{
-            self.progressBar?.startAnimating()
-            self.progressBar?.isHidden = false
-        }
-        
-        let params = [
-            "order_key" : orderKey
-        ]
-        
-        let headers : HTTPHeaders = [
-            "Content-Type": "application/x-www-form-urlencoded"
-        ]
-        
-        AF.request(PHConfigs.BASE_URL! + PHConfigs.STATUS,
-                   method: .post,
-                   parameters: params,
-                   headers: headers).validate()
-            .responseString(completionHandler: { (response) in
-                switch response.result{
-                case let .success(value):
-                    xprint(value)
-                case .failure(_):
-                    xprint("Error")
+    private func startOrderStatusCheckTimer() {
+        guard lifecycle.phase == .active, statusTimer == nil else { return }
+        let attemptID = lifecycle.attemptID
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] firedTimer in
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    firedTimer.invalidate()
+                    return
                 }
-            })
-            .responseData(completionHandler: { response in
-                
+                guard self.lifecycle.accepts(attemptID), self.statusTimer === firedTimer else { return }
+                self.orderStatusTimerTicked()
+            }
+        }
+    }
+
+    private func checkStatus(orderKey: String, showProgress: Bool,
+                             _ completion: ((StatusResponse?) -> Void)? = nil) {
+        guard lifecycle.phase == .active, statusRequest == nil, !orderKey.isEmpty,
+              initResponse?.data?.order?.orderKey == orderKey else { return }
+        if showProgress {
+            progressBar.startAnimating()
+            progressBar.isHidden = false
+        }
+        let attemptID = lifecycle.attemptID
+        let request = networkSession.request((PHConfigs.BASE_URL ?? PHConfigs.LIVE_URL) + PHConfigs.STATUS,
+                                             method: .post, parameters: ["order_key": orderKey],
+                                             headers: ["Content-Type": "application/x-www-form-urlencoded"]).validate()
+        statusRequest = request
+        request.responseData(queue: .main) { [weak self, weak request] response in
+            DispatchQueue.main.async {
+                guard let self = self, let request = request,
+                      self.lifecycle.accepts(attemptID), self.statusRequest === request else { return }
+                self.statusRequest = nil
                 let handler = completion ?? self.handlePaymentStatus
-                
-                switch response.result{
+                switch response.result {
                 case .success(let data):
-                    guard let jsonString = String(data: data, encoding: .utf8) else {
+                    guard let json = String(data: data, encoding: .utf8),
+                          let status = Mapper<StatusResponse>().map(JSONString: json) else {
                         handler(nil)
                         return
                     }
-                    
-                    guard let obj = Mapper<StatusResponse>().map(JSONString: jsonString) else{
-                        handler(nil)
-                        return
-                    }
-                    
-                    handler(obj)
-                case .failure(_):
+                    handler(status)
+                case .failure:
                     handler(nil)
                 }
-                
-            })
-
+            }
+        }
     }
-    
+
     private func createErrorResponse<T: Mappable>(_ request: URLRequest, response:AFDataResponse<Data>) -> DataResponse<T, AFError>{
         let error: AFError = .responseValidationFailed(reason: .unacceptableStatusCode(code: 403))
         let result: Result<T, AFError> = .failure(error)
@@ -1127,55 +1064,45 @@ public class PHBottomViewController: UIViewController {
         return failedResponse
     }
                           
-    private func handlePaymentStatus(response : StatusResponse?){
-        
-        guard !didHandlePaymentStatus else { return }
-        didHandlePaymentStatus = true
-        
-        xprint("handlePaymentStatus called")
-        
-        //        self.lblThankYou.isHidden = false
-        //        self.viewNavigationWrapper.isHidden = true
-        //        self.lblselectedMethod.isHidden = true
-        //        self.collectionView.isHidden = true
-        self.viewPaymentSucess.isHidden = false
-        
-        guard let lastResponse = response else{
-            
-            self.close {
+    private func handlePaymentStatus(response: StatusResponse?) {
+        guard lifecycle.phase == .active else { return }
+        guard let response = response else {
+            close {
                 self.delegate?.onResponseReceived(response: nil)
             }
-            
             return
         }
-        
-        if(shouldShowSucessView){
-            handleNavigation(stepId: .Complete, sectionId: -1)
-            showStatus(response: lastResponse)
-        }else{
-            
-            if(lastResponse.getStatusState() == StatusResponse.Status.SUCCESS ||
-               lastResponse.getStatusState() == StatusResponse.Status.FAILED ||
-               lastResponse.getStatusState() == StatusResponse.Status.AUTHORIZED){
-                delegate?.onResponseReceived(response: PHResponse(status: self.getStatusFromResponse(lastResponse: lastResponse), message: "Payment completed. Check response data", data: lastResponse))
+        guard lifecycle.receiveTerminalStatus(response.getStatusState()) else { return }
+        statusResponse = response
+        cancelPendingWork()
+        let displayResult = { [weak self] in
+            guard let self = self, self.lifecycle.phase == .result else { return }
+            if self.configuration.showResultScreen {
+                self.handleNavigation(stepId: .Complete, sectionId: -1)
+                self.showStatus(response: response)
+            } else {
+                self.finishWithResult()
             }
-            
-            self.close {
-                self.progressBar?.stopAnimating()
-                self.progressBar?.isHidden = true
-            }
-            
+        }
+        if let alert = cancellationAlert {
+            cancellationAlert = nil
+            alert.dismiss(animated: false, completion: displayResult)
+        } else {
+            displayResult()
         }
     }
-    
-    private func showStatus(response : StatusResponse?){
-        
-        guard let lastResponse = response else{
-            self.close {
-                self.delegate?.onResponseReceived(response: nil)
-            }
-            return
+
+    private func finishWithResult() {
+        guard lifecycle.phase == .result, let response = statusResponse else { return }
+        let result = PHResponse<Any>(status: getStatusFromResponse(lastResponse: response),
+                                     message: "Payment completed. Check response data", data: response)
+        close {
+            self.delegate?.onResponseReceived(response: result)
         }
+    }
+
+    private func showStatus(response : StatusResponse){
+        let lastResponse = response
         
         if(lastResponse.getStatusState() == StatusResponse.Status.SUCCESS){
             imgDeclined.isHidden = true
@@ -1228,42 +1155,32 @@ public class PHBottomViewController: UIViewController {
             self.lblBottomMessage.text = "Please try again with a different card or method"
             self.lblPayWithTitle.text = "Declined"
             
-            btnDone.isHidden = true
-            btnTryAgain.isHidden = false
-            btnCancel.isHidden = false
+            let canRetry = lifecycle.canRetry(configuration: configuration, status: lastResponse.getStatusState())
+            btnDone.isHidden = canRetry
+            btnTryAgain.isHidden = !canRetry
+            btnCancel.isHidden = !canRetry
+            if !canRetry {
+                lblBottomMessage.text = "Close this window to return to the merchant."
+            }
         }
         
         self.statusResponse = lastResponse
         
         timer?.invalidate()
-        timer = Timer.scheduledTimer(timeInterval: 5.0, target: self, selector: #selector(self.update), userInfo: nil, repeats: false)
+        let attemptID = lifecycle.attemptID
+        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] firedTimer in
+            DispatchQueue.main.async {
+                guard let self = self, self.lifecycle.attemptID == attemptID,
+                      self.lifecycle.phase == .result, self.timer === firedTimer else { return }
+                self.update()
+            }
+        }
     }
     
     @objc private func update() {
-        delegate?.onResponseReceived(response: PHResponse(status: self.getStatusFromResponse(lastResponse: statusResponse!), message: "Payment completed. Check response data", data: statusResponse!))
-
-        self.timer?.invalidate()
-        self.close {
-            self.progressBar?.stopAnimating()
-            self.progressBar?.isHidden = true
-        }
-        
-        /*
-        if(count > 0) {
-            count = count - 1
-            lblSecureWindow.text = String(format :"This secure payment window is closing in %d seconds...",count)
-        }else{
-            delegate?.onResponseReceived(response: PHResponse(status: self.getStatusFromResponse(lastResponse: statusResponse!), message: "Payment completed. Check response data", data: statusResponse!))
-
-            self.timer?.invalidate()
-
-            self.close {
-                self.progressBar?.stopAnimating()
-                self.progressBar?.isHidden = true
-            }
-        }
-         */
+        finishWithResult()
     }
+
     
     private func getStatusFromResponse(lastResponse : StatusResponse) -> Int{
         
@@ -1282,7 +1199,7 @@ public class PHBottomViewController: UIViewController {
         }
         
         if(apiMethod == .CheckOut || apiMethod == .Recurrence){
-            if ((initRequest?.amount)! <= 0.0) {
+            guard let amount = initRequest?.amount, amount > 0 else {
                 return "Invalid amount";
             }
         }
@@ -1402,29 +1319,20 @@ public class PHBottomViewController: UIViewController {
         
     }
     
-    @objc private func orderStatusTimerTicked(){
-        let orderKey = initResponse?.data!.order?.orderKey ?? ""
-        self.checkStatus(orderKey: orderKey, showProgress: false){ [weak self] (statusResponse) in
-            guard let `self` = self else { return }
-            guard let status = statusResponse?.status else { return }
-            guard status != StatusResponse.Status.INIT.rawValue else { return }
-            self.handlePaymentStatus(response: statusResponse)
+    @objc private func orderStatusTimerTicked() {
+        guard lifecycle.phase == .active,
+              let key = initResponse?.data?.order?.orderKey, !key.isEmpty else { return }
+        checkStatus(orderKey: key, showProgress: false) { [weak self] response in
+            guard let self = self, let status = response?.getStatusState(),
+                  status != .INIT, status != .PAYMENT else { return }
+            self.handlePaymentStatus(response: response)
         }
     }
-    
-    @IBAction private func btnDoneTapped(){
-        delegate?.onResponseReceived(
-            response: PHResponse(
-                status: self.getStatusFromResponse(lastResponse: statusResponse!),
-                message: "Payment completed. Check response data",
-                data: statusResponse!))
-        
-        self.timer?.invalidate()
-        self.close {
-            self.progressBar?.stopAnimating()
-            self.progressBar?.isHidden = true
-        }
+
+    @IBAction private func btnDoneTapped() {
+        finishWithResult()
     }
+
     
     @IBAction private func btnCancelTapped(){
         self.timer?.invalidate()
@@ -1436,6 +1344,7 @@ public class PHBottomViewController: UIViewController {
     }
     
     @IBAction private func btnTryAgainTapped(){
+        guard lifecycle.canRetry(configuration: configuration, status: statusResponse?.getStatusState()) else { return }
         performInitialSteps()
     }
     
@@ -1455,68 +1364,72 @@ public class PHBottomViewController: UIViewController {
 extension PHBottomViewController : WKUIDelegate,WKNavigationDelegate{
     
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        
-        guard step == .Payment else {
-            self.webView.isHidden = true
-            self.progressBar.isHidden = true
-            return
+        guard lifecycle.phase == .active, step == .Payment,
+              let navigation = navigation else { return }
+        if let attempt = navigationAttempts.object(forKey: navigation) {
+            guard attempt as UUID == requestID else { return }
+        } else {
+            guard activeNavigation != nil else { return }
+            navigationAttempts.setObject(requestID as NSUUID, forKey: navigation)
         }
-        
-        guard !ignoreProgressBarInNextNavigation else {
-            self.webView.isHidden = false
-            self.progressBar.isHidden = true
-            return
-        }
-        
-        self.webView.isHidden = true
-        self.progressBar.isHidden = false
-        
+        activeNavigation = navigation
+        webView.isHidden = !ignoreProgressBarInNextNavigation
+        progressBar.isHidden = ignoreProgressBarInNextNavigation
     }
-    
+
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        
+        guard lifecycle.phase == .active, step == .Payment else {
+            decisionHandler(.cancel)
+            return
+        }
+        let attemptID = lifecycle.attemptID
+        let operationID = requestID
         let optUrl = navigationAction.request.mainDocumentURL?.absoluteString
-        xprint(optUrl ?? "Navigating to unknown location")
         ignoreProgressBarInNextNavigation = false
-        
-        if let url = optUrl{
-            if((url.contains(PHConstants.kLiveCompleteURL)) || (url.contains(PHConstants.kSandboxCompleteURL))){
-                if(self.initResponse?.data?.order != nil){
-                    if isSandBoxEnabled{
-                        
-                        DispatchQueue.main.asyncAfter(deadline: .now()+1) {
-                            self.checkStatus(orderKey: self.initResponse?.data!.order?.orderKey ?? "", showProgress: true)
+        if let url = optUrl {
+            if url.contains(PHConstants.kLiveCompleteURL) || url.contains(PHConstants.kSandboxCompleteURL) {
+                if let key = initResponse?.data?.order?.orderKey, !key.isEmpty {
+                    if isSandBoxEnabled {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                            guard let self = self, self.lifecycle.accepts(attemptID), self.requestID == operationID else { return }
+                            self.checkStatus(orderKey: key, showProgress: true)
                         }
-                        
-                    }else{
-                        self.checkStatus(orderKey: self.initResponse?.data!.order?.orderKey ?? "", showProgress: true)
+                    } else {
+                        checkStatus(orderKey: key, showProgress: true)
                     }
                 }
-            }
-            else if url.contains(PHConstants.kProgressBarWhitelistKeywordFrimi){
-                // Fix for issue Prevent progress bar hiding the Frimi steps
+            } else if url.contains(PHConstants.kProgressBarWhitelistKeywordFrimi) {
                 ignoreProgressBarInNextNavigation = true
-                
-                if url.contains(PHConstants.kProgressBarWhitelistKeywordFrimiResponse){
-                    // Fix for issue where Frimi steps don't load the first time
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if url.contains(PHConstants.kProgressBarWhitelistKeywordFrimiResponse) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                        guard let self = self, self.lifecycle.accepts(attemptID),
+                              self.requestID == operationID else {
+                            decisionHandler(.cancel)
+                            return
+                        }
                         decisionHandler(.allow)
                     }
-                    return;
+                    return
                 }
             }
         }
-        
         decisionHandler(.allow)
     }
-    
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard step == .Payment else { return }
-        insertCSSString(into: webView) // 1
-        self.webView.isHidden = false
-        self.progressBar.isHidden = true
+
+    private func ownsNavigation(_ navigation: WKNavigation?) -> Bool {
+        guard lifecycle.phase == .active, step == .Payment,
+              let navigation = navigation, activeNavigation === navigation,
+              let attempt = navigationAttempts.object(forKey: navigation) else { return false }
+        return attempt as UUID == requestID
     }
-    
+
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard ownsNavigation(navigation) else { return }
+        insertCSSString(into: webView)
+        webView.isHidden = false
+        progressBar.isHidden = true
+    }
+
     private func insertCSSString(into webView: WKWebView) {
         // Viewport meta tag is now injected via WKUserScript at document start
         // This method now only handles additional CSS if needed in the future
@@ -1578,6 +1491,7 @@ extension PHBottomViewController : UITableViewDelegate,UITableViewDataSource{
     }
     
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        guard lifecycle.phase == .active, paymentRequest == nil else { return }
         if indexPath.section == 0{
             
             let method = bankAccount[indexPath.row]
@@ -1617,10 +1531,15 @@ extension PHBottomViewController : UITableViewDelegate,UITableViewDataSource{
 extension PHBottomViewController : PaymentOptionTableViewCellDelegate{
     
     public func didSelectedPaymentOption(paymentMethod: PaymentMethod, selectedSection: Int) {
+        guard lifecycle.phase == .active, paymentRequest == nil,
+              step == .Dashboard else { return }
         //MARK: Call Submit Method With Order Key
         
-        // Stop any started HelaPay counters
-        timer?.invalidate()
+        // Stop any started HelaPay status checks before selecting a method.
+        statusTimer?.invalidate()
+        statusTimer = nil
+        statusRequest?.cancel()
+        statusRequest = nil
         
         if let temp =  self.paymentOption.filter({$0.optionValue.uppercased() == paymentMethod.method?.uppercased()}).first{
             self.selectedPaymentOption = temp

@@ -197,14 +197,37 @@ let initRequest = PHInitialRequest(
 )
 ```
 
-### Precent PayHere Payment View
-In order to make a payment request, first initialize PayHere ViewController as below;
+### Present PayHere Payment View
+Pass a configuration for each payment presentation. Both options default to `true` and apply to checkout, recurring payments, preapproval, and hold-on-card payments.
 
 ```swift
-PHPrecentController.precent(from: self, withInitRequest: initRequest, delegate: self)
+let configuration = PHPaymentConfiguration(
+    showResultScreen: true,
+    showRetryOnResultScreen: true
+)
+
+PHPrecentController.present(
+    from: self,
+    withInitRequest: initRequest,
+    configuration: configuration,
+    delegate: self
+)
 ```
 
+| `showResultScreen` | `showRetryOnResultScreen` | Behavior |
+| --- | --- | --- |
+| `true` | `true` | Show the result screen. Failed payments offer Retry. |
+| `true` | `false` | Show the result screen. Failed payments offer Done, which returns the failed payment response. |
+| `false` | `true` | Dismiss after receiving a final payment status. No result screen or Retry is shown. |
+| `false` | `false` | Dismiss after receiving a final payment status. No result screen or Retry is shown. |
+
+Result screens are shown only for final statuses: success, failure, or authorization. Pending payments continue checking their status. Retry is never offered for successful or authorized payments. Displayed result screens retain the five-second automatic close behavior.
+
+Configuration values are immutable and scoped to each presentation. Existing `present(from:withInitRequest:shouldShowPaymentStatus:delegate:)` and deprecated `precent(...)` calls remain supported; `shouldShowPaymentStatus` controls the result screen and keeps Retry enabled for failures.
+
 ### Handle Payment Response
+
+The SDK delivers one completion callback on the main queue after the payment view is dismissed. Closing a failed result with Retry disabled returns the failed payment response. Cancelling an unfinished payment reports an error. Validation errors detected before presentation are also delivered on the main queue.
 
 ```swift
 extension ViewController : PHViewControllerDelegate{

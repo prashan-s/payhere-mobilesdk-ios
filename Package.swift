@@ -37,6 +37,11 @@ let package = Package(
                 .process("PrivacyInfo.xcprivacy"),
                 .process("Resources")
             ]
+        ),
+        .testTarget(
+            name: "payHereSDKTests",
+            dependencies: ["payHereSDK", "ObjectMapper", "Alamofire"],
+            path: "Tests/payHereSDKTests"
         )
     ],
     swiftLanguageVersions: [.v5]

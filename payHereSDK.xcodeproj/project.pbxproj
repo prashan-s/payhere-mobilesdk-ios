@@ -68,6 +68,8 @@
 		C7E9F6BF277C76A10013D2D4 /* PHBottomSheetTableViewSectioHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7E9F6BE277C76A10013D2D4 /* PHBottomSheetTableViewSectioHeader.swift */; };
 		F503041127E4744C008844E5 /* PHUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = F503041027E4744C008844E5 /* PHUtils.swift */; };
 		F505EC902833418C00F6AC4F /* WaitUntil.swift in Sources */ = {isa = PBXBuildFile; fileRef = F505EC8F2833418C00F6AC4F /* WaitUntil.swift */; };
+		BD3CB3AD13A522B9B13C585C /* PHPaymentConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21F8EAFAE29385F6F5CC525 /* PHPaymentConfiguration.swift */; };
+		0D97DD0DB9EADFF9A6A8C80B /* PHPaymentLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6C387DC19F66C027205B042 /* PHPaymentLifecycle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -161,6 +163,8 @@
 		D7DD1039BF34A0CFEC86BD7D /* Pods-demoapp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-demoapp.debug.xcconfig"; path = "Target Support Files/Pods-demoapp/Pods-demoapp.debug.xcconfig"; sourceTree = "<group>"; };
 		F503041027E4744C008844E5 /* PHUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHUtils.swift; sourceTree = "<group>"; };
 		F505EC8F2833418C00F6AC4F /* WaitUntil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitUntil.swift; sourceTree = "<group>"; };
+		D21F8EAFAE29385F6F5CC525 /* PHPaymentConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPaymentConfiguration.swift; sourceTree = "<group>"; };
+		D6C387DC19F66C027205B042 /* PHPaymentLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPaymentLifecycle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -312,6 +316,8 @@
 				8A74D7EB20528E3800CF10AB /* ParamHandler.swift */,
 				8A74D7FE20528E7100CF10AB /* Extention.swift */,
 				F503041027E4744C008844E5 /* PHUtils.swift */,
+				D21F8EAFAE29385F6F5CC525 /* PHPaymentConfiguration.swift */,
+				D6C387DC19F66C027205B042 /* PHPaymentLifecycle.swift */,
 				C746D50F234C9A7300F9D06F /* PHPrecentController.swift */,
 				C799349323A8E72B005E5A7B /* PHBottomViewController.swift */,
 				C72750CC23A75B8A00AE9037 /* image.xcassets */,
@@ -536,6 +542,8 @@
 				C72A13D42785ABBE00F08E22 /* SubmitRequest.swift in Sources */,
 				C75702C123D9642C00805AF8 /* PHInitRequest.swift in Sources */,
 				C75702C323D964A700805AF8 /* PHEnums.swift in Sources */,
+				BD3CB3AD13A522B9B13C585C /* PHPaymentConfiguration.swift in Sources */,
+				0D97DD0DB9EADFF9A6A8C80B /* PHPaymentLifecycle.swift in Sources */,
 				C746D510234C9A7300F9D06F /* PHPrecentController.swift in Sources */,
 				8A74D7F920528E5C00CF10AB /* Customer.swift in Sources */,
 				C7E9F6BF277C76A10013D2D4 /* PHBottomSheetTableViewSectioHeader.swift in Sources */,
