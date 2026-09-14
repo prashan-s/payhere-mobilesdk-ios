@@ -248,6 +248,12 @@ extension ViewController : PHViewControllerDelegate{
 }
 ```
 
+### Source layout
+
+`payHereSDK/Sources` is organized into `API`, `Core`, `Models`, `UI`, `Utilities`, and `Resources`. UI files are grouped by controllers, cells, views, and theme. Resources contain assets, fonts, nibs, the storyboard, and the privacy manifest.
+
+The Xcode navigator mirrors this directory through a synchronized folder. Add SDK files on disk; `Package.swift` owns compilation and resource processing. SDK sources do not belong directly to the demo or test target.
+
 ### Tests
 
 For local development, open `payHereSDK.xcodeproj` and run the `demoapp` scheme. The demo uses the Swift package from this checkout, including its resources.

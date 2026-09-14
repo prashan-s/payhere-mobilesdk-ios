@@ -29,9 +29,6 @@ let package = Package(
             ],
             path: "payHereSDK/Sources",
             resources: [
-                .process("colors.xcassets"),
-                .process("image.xcassets"),
-                .process("PrivacyInfo.xcprivacy"),
                 .process("Resources")
             ]
         ),
