@@ -14,7 +14,7 @@ extension Bundle{
         #if SWIFT_PACKAGE
         return Bundle.module
         #else
-        return Bundle(for: PHPrecentController.self)
+        return Bundle(for: PHPresentController.self)
         #endif
     }
     

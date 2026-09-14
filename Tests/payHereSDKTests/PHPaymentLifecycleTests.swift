@@ -6,7 +6,7 @@ import Alamofire
 
 final class PHPaymentLifecycleTests: XCTestCase {
     func testConfigurationPreservesExistingDefaults() {
-        let configuration = PHPaymentConfiguration()
+        let configuration = PHPaymentConfiguration.default
 
         XCTAssertTrue(configuration.showResultScreen)
         XCTAssertTrue(configuration.showRetryOnResultScreen)
@@ -45,7 +45,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
             XCTAssertFalse(lifecycle.receiveTerminalStatus(status))
             XCTAssertEqual(lifecycle.phase, .active)
             XCTAssertTrue(lifecycle.accepts(attemptID))
-            XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: status))
+            XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: status))
         }
     }
 
@@ -74,7 +74,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
         XCTAssertNotEqual(failedAttemptID, retryAttemptID)
         XCTAssertFalse(lifecycle.accepts(failedAttemptID))
         XCTAssertTrue(lifecycle.accepts(retryAttemptID))
-        XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: .FAILED))
+        XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: .FAILED))
         XCTAssertTrue(lifecycle.receiveTerminalStatus(.SUCCESS))
     }
 
@@ -89,7 +89,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
         XCTAssertFalse(lifecycle.beginClosing())
         XCTAssertFalse(lifecycle.accepts(attemptID))
         XCTAssertNil(lifecycle.beginAttempt())
-        XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: .FAILED))
+        XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: .FAILED))
         XCTAssertFalse(lifecycle.receiveTerminalStatus(.SUCCESS))
 
         XCTAssertTrue(lifecycle.finishClosing())
@@ -139,7 +139,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
         ]
 
         for configuration in configurations {
-            PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
+            PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
                                         configuration: configuration, delegate: delegate)
         }
 
@@ -153,10 +153,15 @@ final class PHPaymentLifecycleTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyPresentationMapsStatusFlagAndRetainsRetryDefault() async throws {
+    func testPresentationWithoutConfigurationPreservesDefaultsAndLegacyFlags() async throws {
         let presenter = CapturingPresenter()
         let delegate = UnexpectedPaymentDelegate()
 
+        PHPresentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
+        PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
+                                    shouldShowPaymentStatus: true, delegate: delegate)
+        PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
+                                    shouldShowPaymentStatus: false, delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: true, delegate: delegate)
@@ -165,8 +170,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         PHPrecentController.precent(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: false, delegate: delegate)
 
-        XCTAssertEqual(presenter.capturedControllers.count, 4)
-        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, false, false]) {
+        XCTAssertEqual(presenter.capturedControllers.count, 7)
+        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, false, true, true, false, false]) {
             let payment = try XCTUnwrap(controller as? PHBottomViewController)
             XCTAssertEqual(payment.configuration.showResultScreen, expectedResult)
             XCTAssertTrue(payment.configuration.showRetryOnResultScreen)
@@ -206,7 +211,7 @@ private final class UnexpectedPaymentDelegate: PHViewControllerDelegate {
 final class PHPaymentControllerTests: XCTestCase {
     @MainActor
     func testPendingStatusKeepsCheckingWithoutResultOrRetry() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":1}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -226,7 +231,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testHiddenResultCompletesOnceOnMainThreadAfterDismissal() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: false), api: .CheckOut,
+        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: false, showRetryOnResultScreen: true), api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":2,\"paymentNo\":123}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -249,7 +254,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testRetryDisabledFailureShowsDoneAndReturnsKnownFailureOnce() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showRetryOnResultScreen: false), api: .CheckOut,
+        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: true, showRetryOnResultScreen: false), api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":-2,\"message\":\"Declined\"}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -279,7 +284,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testRetryCancelsPreviousResultsFiveSecondDismissal() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":-2}".utf8))])
         addTeardownBlock { await fixture.stop() }

@@ -186,15 +186,25 @@ let initRequest = PHInitialRequest(
 ```
 
 ### Present PayHere Payment View
-Pass a configuration for each payment presentation. Both options default to `true` and apply to checkout, recurring payments, preapproval, and hold-on-card payments.
+Configuration is optional. You do not need to create or pass `PHPaymentConfiguration` to integrate the SDK. Without it, the SDK shows the result screen and offers Retry after failed payments.
+
+```swift
+PHPresentController.present(
+    from: self,
+    withInitRequest: initRequest,
+    delegate: self
+)
+```
+
+Pass a configuration only when customizing that behavior. Both options default to `true` and apply to checkout, recurring payments, preapproval, and hold-on-card payments. For example, show the result screen without Retry:
 
 ```swift
 let configuration = PHPaymentConfiguration(
     showResultScreen: true,
-    showRetryOnResultScreen: true
+    showRetryOnResultScreen: false
 )
 
-PHPrecentController.present(
+PHPresentController.present(
     from: self,
     withInitRequest: initRequest,
     configuration: configuration,
@@ -211,7 +221,9 @@ PHPrecentController.present(
 
 Result screens are shown only for final statuses: success, failure, or authorization. Pending payments continue checking their status. Retry is never offered for successful or authorized payments. Displayed result screens retain the five-second automatic close behavior.
 
-Configuration values are immutable and scoped to each presentation. Existing `present(from:withInitRequest:shouldShowPaymentStatus:delegate:)` and deprecated `precent(...)` calls remain supported; `shouldShowPaymentStatus` controls the result screen and keeps Retry enabled for failures.
+Set `showResultScreen` to `false` when your app handles the outcome through the delegate callbacks. `showRetryOnResultScreen` is ignored when the result screen is hidden. Configuration applies to each presentation.
+
+`PHPresentController` replaces the misspelled `PHPrecentController`. For new integrations, use `PHPresentController.present(...)`. To migrate existing integrations, replace `PHPrecentController` with `PHPresentController` and rename any `precent(...)` calls to `present(...)`. Calls that pass `configuration` must use `PHPresentController`. The deprecated class retains its `present` and `precent` methods with the optional `shouldShowPaymentStatus` argument for compatibility. That argument controls the result screen and keeps Retry enabled for failures.
 
 ### Handle Payment Response
 
