@@ -28,9 +28,6 @@ let package = Package(
                 "SDWebImage"
             ],
             path: "payHereSDK/Sources",
-            exclude: [
-                "Info.plist"
-            ],
             resources: [
                 .process("colors.xcassets"),
                 .process("image.xcassets"),

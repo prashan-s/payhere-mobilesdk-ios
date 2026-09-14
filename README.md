@@ -1,5 +1,5 @@
 # PayHere Mobile SDK for iOS
-[![Language](https://img.shields.io/badge/Language-swift-orange?style=flat-square)](https://developer.apple.com/swift) [![Platforms](https://img.shields.io/cocoapods/p/payHereSDK?style=flat-square)](https://developer.apple.com/ios) [![CocoaPods](https://img.shields.io/cocoapods/v/payHereSDK.svg?style=flat)](https://cocoapods.org/pods/payHereSDK) [![License](https://img.shields.io/cocoapods/l/payHereSDK.svg?style=flat-square)](https://cocoapods.org/pods/payHereSDK) ![CocoaPods](https://img.shields.io/badge/CocoaPods-compatible-green?style=flat-square) [![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)
+[![Language](https://img.shields.io/badge/Language-swift-orange?style=flat-square)](https://developer.apple.com/swift) [![Platforms](https://img.shields.io/badge/Platform-iOS_13%2B-blue?style=flat-square)](https://developer.apple.com/ios) [![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://swift.org/package-manager/)
 
 PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your iOS app, without redirecting your app user to the web browser.
 
@@ -7,6 +7,7 @@ PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your 
 -  [Requirements](#Requirements)
 -  [Installation](#Installation)
 -  [Usage](#Usage)
+-  [Tests](#tests)
 
 ## Requirements
 - iOS 13.0+
@@ -17,7 +18,7 @@ PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your 
 
 ### Swift Package Manager
 
-[Swift Package Manager](https://swift.org/package-manager/) is a tool for managing the distribution of Swift code. It's integrated with the Swift build system to automate the process of downloading, compiling, and linking dependencies.
+PayHere is distributed through [Swift Package Manager](https://swift.org/package-manager/). Xcode resolves its dependencies automatically.
 
 To integrate PayHere into your Xcode project using Swift Package Manager:
 
@@ -27,7 +28,7 @@ To integrate PayHere into your Xcode project using Swift Package Manager:
    https://github.com/PayHereLK/payhere-mobilesdk-ios.git
    ```
 3. Select the version you want to use
-4. Click **Add Package**
+4. Click **Add Package** and add the `payHereSDK` product to your app target
 
 Alternatively, you can add it to your `Package.swift` file:
 
@@ -37,28 +38,15 @@ dependencies: [
 ]
 ```
 
-### CocoaPods
+Add the SDK product to the target that imports it:
 
-[CocoaPods](http://cocoapods.org) is a dependency manager for Cocoa projects. You can install it with the following command:
-
-```bash
-$ gem install cocoapods
-```
-To integrate PayHere into your Xcode project using CocoaPods, specify it in your `Podfile`:
-
-```ruby
-source 'https://github.com/CocoaPods/Specs.git'
-platform :ios, '13.0'
-use_frameworks! # add this line if not present
-
-target '<Your Target Name>' do
-    pod 'payHereSDK'
-end
-```
-Then, run the following command:
-
-```bash
-$ pod install
+```swift
+.target(
+    name: "YourAppTarget",
+    dependencies: [
+        .product(name: "payHereSDK", package: "payhere-mobilesdk-ios")
+    ]
+)
 ```
 
 ## Usage
@@ -260,14 +248,10 @@ extension ViewController : PHViewControllerDelegate{
 }
 ```
 
-## FAQ
+### Tests
 
-How to fixed [!] Unable to find a specification for payHereSDK issue 
+For local development, open `payHereSDK.xcodeproj` and run the `demoapp` scheme. The demo uses the Swift package from this checkout, including its resources.
 
-follow the instruction given bellow
+Open `payHereSDK.xcodeproj` and run the `payHereSDK-Tests` scheme on an iOS Simulator. Xcode resolves the Swift package dependencies when the project opens. The suite uses `demoapp` as its host for UIKit presentation, result configuration, dismissal, and request-failure tests. SDK requests are intercepted with local responses; these tests do not submit real payments.
 
-```bash
-$ pod repo remove master
-$ pod setup
-$ pod install
-```
+Package-only test runs can execute the configuration and lifecycle tests. UIKit integration tests require the app host and are explicitly skipped without one.
