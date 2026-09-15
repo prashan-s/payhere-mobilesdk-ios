@@ -7,7 +7,7 @@
 //
 
 import UIKit
-import payHereSDK
+import PayHereSDK
 
 class ViewController: UIViewController {
     
