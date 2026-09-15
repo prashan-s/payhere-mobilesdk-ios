@@ -4,14 +4,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "payHereSDK",
+    name: "PayHereSDK",
     platforms: [
         .iOS(.v13)
     ],
     products: [
         .library(
-            name: "payHereSDK",
-            targets: ["payHereSDK"]
+            name: "PayHereSDK",
+            targets: ["PayHereSDK"]
         )
     ],
     dependencies: [
@@ -21,22 +21,21 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "payHereSDK",
+            name: "PayHereSDK",
             dependencies: [
                 "Alamofire",
                 "ObjectMapper",
                 "SDWebImage"
             ],
-            path: "payHereSDK/Sources",
-            exclude: [
-                "Info.plist"
-            ],
+            path: "PayHereSDK/Sources",
             resources: [
-                .process("colors.xcassets"),
-                .process("image.xcassets"),
-                .process("PrivacyInfo.xcprivacy"),
                 .process("Resources")
             ]
+        ),
+        .testTarget(
+            name: "PayHereSDKTests",
+            dependencies: ["PayHereSDK", "ObjectMapper", "Alamofire", "SDWebImage"],
+            path: "Tests/PayHereSDKTests"
         )
     ],
     swiftLanguageVersions: [.v5]
