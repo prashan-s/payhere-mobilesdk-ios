@@ -7,12 +7,12 @@
 //
 
 import UIKit
-import payHereSDK
+import PayHereSDK
 
 class ViewController: UIViewController {
     
     let merchantID = "1211149" // <YOUR_MERCHANT_ID>
-    
+
     var initRequest : PHInitialRequest?
 
     override func viewDidLoad() {
@@ -48,7 +48,21 @@ class ViewController: UIViewController {
                                        custom2: "custom 02")
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Configuration is optional. You do not need to create or pass one to integrate the SDK.
+        // The defaults show the result screen and offer Retry after a failed payment.
+        // Set `showResultScreen` to false if your app handles the outcome through the delegate.
+        // Set `showRetryOnResultScreen` to false to hide Retry on the failed result screen.
+        // `showRetryOnResultScreen` is ignored when showResultScreen is false.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        // To use SDK defaults, omit the configuration argument:
+        // PayHereSDK.present(from: self, withInitRequest: initRequest!, delegate: self)
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
     
     
@@ -78,7 +92,15 @@ class ViewController: UIViewController {
         
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional configuration for this payment only; omit it to use SDK defaults.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
     
     @IBAction func btnRecurringPressed(_ sender: UIButton) {
@@ -111,7 +133,16 @@ class ViewController: UIViewController {
             recurrence: .Month(period: 2),
             duration: .Forver)
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional configuration for this payment only; omit it to use SDK defaults.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self,
+                                    withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
         
     }
     
@@ -147,7 +178,16 @@ class ViewController: UIViewController {
       
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional configuration for this payment only; omit it to use SDK defaults.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self,
+                                    withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
 }
 
@@ -180,4 +220,3 @@ extension ViewController : PHViewControllerDelegate{
     
     
 }
-
