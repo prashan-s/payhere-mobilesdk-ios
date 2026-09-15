@@ -7,8 +7,8 @@
   <a href="https://github.com/PayHereLK/payhere-mobilesdk-ios/tags">
     <img src="https://img.shields.io/github/v/tag/PayHereLK/payhere-mobilesdk-ios?style=flat&amp;label=Swift%20Package%20Manager" alt="Latest SDK tag"/>
   </a>
-  <a href="#swift-package-index">
-    <img src="https://img.shields.io/badge/Swift%20Package%20Index-pending%20submission-orange?style=flat" alt="Swift Package Index: pending submission"/>
+  <a href="https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios">
+    <img src="https://img.shields.io/badge/Swift%20Package%20Index-View%20package-orange?style=flat" alt="View PayHere on Swift Package Index"/>
   </a>
   <a href="https://developer.apple.com/ios">
     <img src="https://img.shields.io/badge/Platform-iOS_13%2B-blue?style=flat" alt="iOS 13 and later"/>
@@ -87,7 +87,15 @@ Previously published versions remain listed as [`payHereSDK` on CocoaPods](https
 
 ### Swift Package Index
 
-Swift Package Index submission is pending. This checkout includes [.spi.yml](.spi.yml) to generate iOS API documentation for the `PayHereSDK` target. Maintainers can follow the [submission checklist](docs/SWIFT_PACKAGE_INDEX.md) to publish the renamed module, submit the canonical repository, and enable live platform and Swift-version badges after indexing. Swift Package Manager remains the installation mechanism.
+Find PayHere on [Swift Package Index](https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios), using the canonical repository [PayHereLK/payhere-mobilesdk-ios](https://github.com/PayHereLK/payhere-mobilesdk-ios). Install the SDK through Swift Package Manager with this repository URL:
+
+```text
+https://github.com/PayHereLK/payhere-mobilesdk-ios.git
+```
+
+Follow the [Swift Package Manager installation](#swift-package-manager) steps to select a compatible release and link the `PayHereSDK` product. Index inclusion does not change the [module migration](#module-migration) requirements for older releases.
+
+This checkout includes [.spi.yml](.spi.yml) to generate iOS API documentation for the `PayHereSDK` target. See the [maintainer guide](docs/SWIFT_PACKAGE_INDEX.md) for release checks and compatibility badge configuration.
 
 ## Usage
 Import PayHere SDK into your UIViewController 

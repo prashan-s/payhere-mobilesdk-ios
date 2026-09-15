@@ -10,7 +10,6 @@
 		2823B1AD279E2755029A8C76 /* PayHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4FC96A3974C7EB114D4B7DF5 /* PayHereSDK */; };
 		3B1E2C3EDAB0A361D38F70DB /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = CC82AAAB043326136DC29BE9 /* Alamofire */; };
 		98AF276E74381C57CBE9B21D /* ObjectMapper in Frameworks */ = {isa = PBXBuildFile; productRef = 0C3464A194D8F02BA4FFB370 /* ObjectMapper */; };
-		D75F6530B90189C1F6099185 /* PHPaymentLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB453E9E8B5462A447E5C7BF /* PHPaymentLifecycleTests.swift */; };
 		FC71BE1C04A144047E2DE553 /* PayHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5BD3094A48B55D101986CD76 /* PayHereSDK */; };
 /* End PBXBuildFile section */
 
@@ -30,7 +29,6 @@
 		8AD11E6120612739002E4F82 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		B8B1751E41E0E318FCE25EBF /* payHereSDKTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = payHereSDKTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C793DE5D23C717C900666008 /* demoapp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = demoapp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		CB453E9E8B5462A447E5C7BF /* PHPaymentLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPaymentLifecycleTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -44,8 +42,9 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		1485490D305926210024B705 /* payHereSDK */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = payHereSDK; sourceTree = "<group>"; };
+		1485490F305926310024B705 /* payHereSDKTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); name = payHereSDKTests; path = Tests/payHereSDKTests; sourceTree = "<group>"; };
 		14F2D63D3057D1CC008A4FCD /* demoapp */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (14F2D6453057D1CF008A4FCD /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = demoapp; sourceTree = "<group>"; };
-		C7F807F32281AA7D008FC750 /* Sources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Sources; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,22 +69,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		3BCBDBF1A1E50E48C270D14D /* Tests/payHereSDKTests */ = {
-			isa = PBXGroup;
-			children = (
-				CB453E9E8B5462A447E5C7BF /* PHPaymentLifecycleTests.swift */,
-			);
-			path = Tests/payHereSDKTests;
-			sourceTree = "<group>";
-		};
 		8A74D7D420528D9800CF10AB = {
 			isa = PBXGroup;
 			children = (
 				8A1FF74A206254DF00924B21 /* README.md */,
 				8AD11E6120612739002E4F82 /* LICENSE */,
-				8A74D7E020528D9800CF10AB /* payHereSDK */,
+				1485490D305926210024B705 /* payHereSDK */,
 				14F2D63D3057D1CC008A4FCD /* demoapp */,
-				3BCBDBF1A1E50E48C270D14D /* Tests/payHereSDKTests */,
+				1485490F305926310024B705 /* payHereSDKTests */,
 				8A74D7DF20528D9800CF10AB /* Products */,
 				7452CB4D965645955D6CB252 /* Package.swift */,
 			);
@@ -98,14 +89,6 @@
 				B8B1751E41E0E318FCE25EBF /* payHereSDKTests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		8A74D7E020528D9800CF10AB /* payHereSDK */ = {
-			isa = PBXGroup;
-			children = (
-				C7F807F32281AA7D008FC750 /* Sources */,
-			);
-			path = payHereSDK;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -122,6 +105,9 @@
 			);
 			dependencies = (
 				0C8DD6141342F18816FB44F3 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1485490F305926310024B705 /* payHereSDKTests */,
 			);
 			name = payHereSDKTests;
 			packageProductDependencies = (
@@ -176,7 +162,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 8A74D7D820528D9800CF10AB /* Build configuration list for PBXProject "PayhereSDK" */;
+			buildConfigurationList = 8A74D7D820528D9800CF10AB /* Build configuration list for PBXProject "payHereSDK" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -220,7 +206,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D75F6530B90189C1F6099185 /* PHPaymentLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,7 +430,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		8A74D7D820528D9800CF10AB /* Build configuration list for PBXProject "PayhereSDK" */ = {
+		8A74D7D820528D9800CF10AB /* Build configuration list for PBXProject "payHereSDK" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				8A74D7E420528D9800CF10AB /* Debug */,

@@ -1,8 +1,10 @@
-# Swift Package Index preparation
+# Swift Package Index maintenance
 
 Canonical repository: `https://github.com/PayHereLK/payhere-mobilesdk-ios.git`.
 
-This checkout prepares the package for submission. It does not publish a release or register the repository with Swift Package Index.
+Package page: [PayHere on Swift Package Index](https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios).
+
+This guide covers release validation, documentation generation, and compatibility badges for the canonical repository. SDK releases are published on GitHub and installed through Swift Package Manager.
 
 ## Package configuration
 
@@ -12,18 +14,18 @@ The root [.spi.yml](../.spi.yml) enables API documentation for the canonical `Pa
 
 ## Maintainer checklist
 
-1. Review the currently empty [LICENSE](../LICENSE) before distributing the next release. The maintainer must supply the intended license terms; this preparation does not select a license.
+1. Review the currently empty [LICENSE](../LICENSE) before distributing the next release. The maintainer must supply the intended license terms; this configuration does not select a license.
 2. Verify that `swift package dump-package` outputs valid JSON and that the package builds for iOS. Verify the existing presentation tests through the `payHereSDK-Tests` Xcode scheme.
-3. Publish the reviewed changes, including `.spi.yml`, to the canonical repository. The `prashan-s` development fork is not the submission URL.
+3. Publish the reviewed changes, including `.spi.yml`, to the canonical repository. The `prashan-s` development fork is not the indexed repository.
 4. Publish a semantic-version tag containing the `PayHereSDK` module rename, with release notes explaining the required import migration and the August 2026 CocoaPods cutoff. Tag `3.2.2` still exposes `payHereSDK`; it does not contain this migration. Choose a release version that accounts for the source-breaking import change.
-5. Follow [Add a Package](https://swiftpackageindex.com/add-a-package) to submit `https://github.com/PayHereLK/payhere-mobilesdk-ios.git`. Wait for acceptance and inspect the package's iOS build and documentation results.
-6. Replace the README's pending-submission badge with the live badges below after the package appears in the index. Obtain the current badge snippets from the package page's maintainer section and verify they show actual results.
+5. Inspect the [package page](https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios) after each release to confirm the indexed version and its iOS build and documentation results.
+6. Keep the README's package link current. If adding live compatibility badges, obtain the current snippets from the package page's maintainer section and verify they show actual results.
 
 The index requires a public repository, a valid root package manifest, valid manifest JSON, a supported Swift version, and successful compilation. It also asks for at least one semantic-version release. The complete criteria are in the [official submission instructions](https://swiftpackageindex.com/add-a-package).
 
-## Badges after indexing
+## Compatibility badges
 
-The expected package page is `https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios`. Do not display these live badges before the listing exists. These endpoints report the index's measured compatibility; they do not assert that every Swift version or Apple platform is supported.
+The README uses a neutral badge linking to the package page. Once build results are available, the live badges below can display the index's measured compatibility. Verify the endpoints before enabling them; they do not assert that every Swift version or Apple platform is supported.
 
 ```html
 <a href="https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios">
