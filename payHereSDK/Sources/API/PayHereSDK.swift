@@ -1,5 +1,5 @@
 //
-//  PHPresentController.swift
+//  PayHereSDK.swift
 //  payHereSDK
 //
 //  Created by Prashan Samarathunge on 2026-10-14.
@@ -10,7 +10,7 @@ import Foundation
 import UIKit
 
 /// Presents the PayHere payment view from a merchant's view controller.
-public final class PHPresentController {
+public final class PayHereSDK {
 
     /// Presents a payment using optional merchant preferences scoped to this presentation.
     /// Omit the configuration argument to use the SDK's default result and retry behavior.
