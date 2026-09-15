@@ -71,7 +71,7 @@ Previously published versions remain listed as [`payHereSDK` on CocoaPods](https
 1. Remove `pod 'payHereSDK'` from each affected target in your `Podfile`, then run `pod install` to update the integration and lockfile. Keep CocoaPods configuration for any other pods your app still uses.
 2. Follow the [Swift Package Manager installation](#swift-package-manager) steps and link `PayHereSDK` to each target that imports the SDK.
 3. Replace `import payHereSDK` with `import PayHereSDK`. Replace any module-qualified references such as `payHereSDK.StatusResponse` with the corresponding unqualified type after importing the new module.
-4. Replace legacy `PHPresentController` or `PHPrecentController` entry points with `PayHereSDK.present(...)` as described in [Usage](#usage). The legacy controller APIs remain deprecated forwarding wrappers.
+4. Replace legacy `PHPresentController` or `PHPrecentController` entry points with `PayHereSDK.present(...)` as described in [Usage](#usage). `PHPresentController` has been removed; `PHPrecentController` remains a deprecated forwarding wrapper.
 5. Build and test your checkout flow, including sandbox payments and delegate callbacks. Ensure the same target does not link both the CocoaPods and Swift Package Manager copies of PayHere.
 
 ### Swift Package Index

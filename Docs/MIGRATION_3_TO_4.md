@@ -24,8 +24,9 @@ If compilation reports `No such module 'payHereSDK'`, replace `import payHereSDK
 
 ## 3. Update the payment entry point
 
-`PayHereSDK` is the canonical payment entry point. Replace `PHPresentController` or the misspelled `PHPrecentController` with `PayHereSDK`, and rename any `precent(...)` calls to `present(...)`.
+- Replace `PHPrecentController` with `PayHereSDK`.
+- Replace `precent(...)` with `present(...)`.
 
-Both legacy controller types remain deprecated compatibility APIs. The deprecated `PHPrecentController` methods retain the optional `shouldShowPaymentStatus` argument; it controls the result screen and keeps Retry enabled for failures.
+`PHPresentController` has been removed; replace it with `PayHereSDK` too. `PHPrecentController` remains deprecated.
 
 Calls that customize result behavior use `PayHereSDK.present(..., configuration:delegate:)`. See [Present PayHere Payment View](../README.md#present-payhere-payment-view) for configuration examples.

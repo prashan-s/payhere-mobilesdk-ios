@@ -158,7 +158,6 @@ final class PHPaymentLifecycleTests: XCTestCase {
         let delegate = UnexpectedPaymentDelegate()
 
         PayHereSDK.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
-        PHPresentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: true, delegate: delegate)
@@ -167,8 +166,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         PHPrecentController.precent(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: false, delegate: delegate)
 
-        XCTAssertEqual(presenter.capturedControllers.count, 6)
-        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, true, true, false, false]) {
+        XCTAssertEqual(presenter.capturedControllers.count, 5)
+        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, true, false, false]) {
             let payment = try XCTUnwrap(controller as? PHBottomViewController)
             XCTAssertEqual(payment.configuration.showResultScreen, expectedResult)
             XCTAssertTrue(payment.configuration.showRetryOnResultScreen)
