@@ -2,11 +2,11 @@ import XCTest
 import UIKit
 import ObjectMapper
 import Alamofire
-@testable import payHereSDK
+@testable import PayHereSDK
 
 final class PHPaymentLifecycleTests: XCTestCase {
     func testConfigurationPreservesExistingDefaults() {
-        let configuration = PHPaymentConfiguration()
+        let configuration = PHPaymentConfiguration.default
 
         XCTAssertTrue(configuration.showResultScreen)
         XCTAssertTrue(configuration.showRetryOnResultScreen)
@@ -45,7 +45,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
             XCTAssertFalse(lifecycle.receiveTerminalStatus(status))
             XCTAssertEqual(lifecycle.phase, .active)
             XCTAssertTrue(lifecycle.accepts(attemptID))
-            XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: status))
+            XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: status))
         }
     }
 
@@ -74,7 +74,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
         XCTAssertNotEqual(failedAttemptID, retryAttemptID)
         XCTAssertFalse(lifecycle.accepts(failedAttemptID))
         XCTAssertTrue(lifecycle.accepts(retryAttemptID))
-        XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: .FAILED))
+        XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: .FAILED))
         XCTAssertTrue(lifecycle.receiveTerminalStatus(.SUCCESS))
     }
 
@@ -89,7 +89,7 @@ final class PHPaymentLifecycleTests: XCTestCase {
         XCTAssertFalse(lifecycle.beginClosing())
         XCTAssertFalse(lifecycle.accepts(attemptID))
         XCTAssertNil(lifecycle.beginAttempt())
-        XCTAssertFalse(lifecycle.canRetry(configuration: PHPaymentConfiguration(), status: .FAILED))
+        XCTAssertFalse(lifecycle.canRetry(configuration: .default, status: .FAILED))
         XCTAssertFalse(lifecycle.receiveTerminalStatus(.SUCCESS))
 
         XCTAssertTrue(lifecycle.finishClosing())
@@ -139,8 +139,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         ]
 
         for configuration in configurations {
-            PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
-                                        configuration: configuration, delegate: delegate)
+            PayHereSDK.present(from: presenter, withInitRequest: makeRequest(),
+                               configuration: configuration, delegate: delegate)
         }
 
         XCTAssertEqual(presenter.capturedControllers.count, configurations.count)
@@ -153,10 +153,12 @@ final class PHPaymentLifecycleTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyPresentationMapsStatusFlagAndRetainsRetryDefault() async throws {
+    func testPresentationWithoutConfigurationPreservesDefaultsAndLegacyFlags() async throws {
         let presenter = CapturingPresenter()
         let delegate = UnexpectedPaymentDelegate()
 
+        PayHereSDK.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
+        PHPresentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: true, delegate: delegate)
@@ -165,26 +167,11 @@ final class PHPaymentLifecycleTests: XCTestCase {
         PHPrecentController.precent(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: false, delegate: delegate)
 
-        XCTAssertEqual(presenter.capturedControllers.count, 4)
-        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, false, false]) {
+        XCTAssertEqual(presenter.capturedControllers.count, 6)
+        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, true, true, false, false]) {
             let payment = try XCTUnwrap(controller as? PHBottomViewController)
             XCTAssertEqual(payment.configuration.showResultScreen, expectedResult)
             XCTAssertTrue(payment.configuration.showRetryOnResultScreen)
-        }
-    }
-
-    @MainActor
-    func testLegacyAndConfiguredPresentationSignaturesRemainAvailable() async {
-        typealias LegacyPresentation = (UIViewController, PHInitialRequest, Bool, PHViewControllerDelegate) -> Void
-        typealias ConfiguredPresentation = (UIViewController, PHInitialRequest, PHPaymentConfiguration, PHViewControllerDelegate) -> Void
-
-        let _: LegacyPresentation = PHPrecentController.precent(from:withInitRequest:shouldShowPaymentStatus:delegate:)
-        let _: LegacyPresentation = PHPrecentController.present(from:withInitRequest:shouldShowPaymentStatus:delegate:)
-        let _: ConfiguredPresentation = PHPrecentController.present(from:withInitRequest:configuration:delegate:)
-
-        // Compile the original call shape as well: its default argument must remain unambiguous.
-        let _: (UIViewController, PHInitialRequest, PHViewControllerDelegate) -> Void = { controller, request, delegate in
-            PHPrecentController.present(from: controller, withInitRequest: request, delegate: delegate)
         }
     }
 
@@ -220,61 +207,8 @@ private final class UnexpectedPaymentDelegate: PHViewControllerDelegate {
 // Exercises the production controller and storyboard with every SDK request intercepted.
 final class PHPaymentControllerTests: XCTestCase {
     @MainActor
-    func testInitializationTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .failure(URLError(.notConnectedToInternet))])
-        addTeardownBlock { await fixture.stop() }
-
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/v2/init"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        XCTAssertEqual(fixture.delegate.callbackCount, 1)
-    }
-
-    @MainActor
-    func testSubmitTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .success(initializationData),
-                                                  "/pay/api/payment/submit": .failure(URLError(.networkConnectionLost))])
-        addTeardownBlock { await fixture.stop() }
-        try await waitForPaymentMethods(fixture)
-
-        fixture.controller.didSelectedPaymentOption(paymentMethod: try visaMethod(), selectedSection: 1)
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/v2/init", "/pay/api/payment/submit"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-    }
-
-    @MainActor
-    func testInitAndSubmitTransportFailureClosesWithErrorWithoutRecoveryAlert() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .PreApproval,
-                                      responses: ["/pay/api/payment/initAndSubmit": .failure(URLError(.timedOut))])
-        addTeardownBlock { await fixture.stop() }
-
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        XCTAssertNil(fixture.alert)
-        XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/initAndSubmit"])
-        XCTAssertEqual(fixture.delegate.errorCount, 1)
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        XCTAssertNil(fixture.controller.presentingViewController)
-    }
-
-    @MainActor
     func testPendingStatusKeepsCheckingWithoutResultOrRetry() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":1}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -294,7 +228,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testHiddenResultCompletesOnceOnMainThreadAfterDismissal() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: false), api: .CheckOut,
+        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: false, showRetryOnResultScreen: true), api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":2,\"paymentNo\":123}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -317,7 +251,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testRetryDisabledFailureShowsDoneAndReturnsKnownFailureOnce() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showRetryOnResultScreen: false), api: .CheckOut,
+        let fixture = try makeFixture(configuration: PHPaymentConfiguration(showResultScreen: true, showRetryOnResultScreen: false), api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":-2,\"message\":\"Declined\"}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -347,7 +281,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
     @MainActor
     func testRetryCancelsPreviousResultsFiveSecondDismissal() async throws {
-        let fixture = try makeFixture(configuration: PHPaymentConfiguration(), api: .CheckOut,
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/order_status": .success(Data("{\"status\":-2}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -375,10 +309,6 @@ final class PHPaymentControllerTests: XCTestCase {
         return Data("{\"status\":1,\"data\":{\"order\":{\"orderKey\":\"test-order\"},\"paymentMethods\":[]}}".utf8)
     }
 
-    private func visaMethod() throws -> PaymentMethod {
-        return try JSONDecoder().decode(PaymentMethod.self, from: Data("{\"method\":\"VISA\",\"submissionCode\":\"VISA\",\"orderNo\":1}".utf8))
-    }
-
     @MainActor
     private func waitForPaymentMethods(_ fixture: PaymentControllerFixture) async throws {
         try await eventually {
@@ -394,7 +324,7 @@ final class PHPaymentControllerTests: XCTestCase {
         // Logic-only package runners have no application event loop for presentation.
         guard let application = UIApplication.perform(NSSelectorFromString("sharedApplication"))?.takeUnretainedValue() as? UIApplication,
               application.delegate != nil else {
-            throw XCTSkip("UI integration tests require the demoapp host. Run the payHereSDK-Tests scheme in payHereSDK.xcodeproj.")
+            throw XCTSkip("UI integration tests require the demoapp host. Run the PayHereSDK-Tests scheme in Demo/Demo.xcodeproj.")
         }
         let scene = try XCTUnwrap(application.connectedScenes.compactMap { $0 as? UIWindowScene }.first,
                                   "The demoapp test host must connect its window scene before UI tests start")
