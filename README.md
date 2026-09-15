@@ -278,6 +278,8 @@ extension ViewController : PHViewControllerDelegate{
 
 `payHereSDK/Sources` is organized into `API`, `Core`, `Models`, `UI`, `Utilities`, and `Resources`. UI files are grouped by controllers, cells, views, and theme. Resources contain assets, fonts, nibs, the storyboard, and the privacy manifest.
 
+`API/PayHereSDK.swift` contains the public payment entry point and forwards to the internal `Core/PHPaymentPresenter.swift` implementation. Merchant validation, storyboard loading, controller configuration, and main-queue dispatch stay inside the SDK. Existing `PayHereSDK.present(...)` calls and deprecated compatibility entry points keep the same behavior. This separates the public API from its implementation; Swift Package Manager still distributes the source files.
+
 The Xcode navigator mirrors this directory through a synchronized folder. Add SDK files on disk; `Package.swift` owns compilation and resource processing. SDK sources do not belong directly to the demo or test target.
 
 ### Tests
