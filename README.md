@@ -1,12 +1,42 @@
 # PayHere Mobile SDK for iOS
-[![Language](https://img.shields.io/badge/Language-swift-orange?style=flat-square)](https://developer.apple.com/swift) [![Platforms](https://img.shields.io/cocoapods/p/payHereSDK?style=flat-square)](https://developer.apple.com/ios) [![CocoaPods](https://img.shields.io/cocoapods/v/payHereSDK.svg?style=flat)](https://cocoapods.org/pods/payHereSDK) [![License](https://img.shields.io/cocoapods/l/payHereSDK.svg?style=flat-square)](https://cocoapods.org/pods/payHereSDK) ![CocoaPods](https://img.shields.io/badge/CocoaPods-compatible-green?style=flat-square) [![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)
+
+<p>
+  <a href="https://cocoapods.org/pods/payHereSDK">
+    <img src="https://img.shields.io/cocoapods/v/payHereSDK?style=flat&amp;label=CocoaPods" alt="CocoaPods version (legacy releases)"/>
+  </a>
+  <a href="https://github.com/PayHereLK/payhere-mobilesdk-ios/tags">
+    <img src="https://img.shields.io/github/v/tag/PayHereLK/payhere-mobilesdk-ios?style=flat&amp;label=Swift%20Package%20Manager" alt="Latest SDK tag"/>
+  </a>
+  <a href="https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios">
+    <img src="https://img.shields.io/badge/Swift%20Package%20Index-View%20package-orange?style=flat" alt="View PayHere on Swift Package Index"/>
+  </a>
+  <a href="https://developer.apple.com/ios">
+    <img src="https://img.shields.io/badge/Platform-iOS_13%2B-blue?style=flat" alt="iOS 13 and later"/>
+  </a>
+  <a href="https://developer.apple.com/swift">
+    <img src="https://img.shields.io/badge/Language-Swift-orange?style=flat" alt="Swift"/>
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat" alt="License: Apache 2.0"/>
+  </a>
+</p>
+
+> [!WARNING]
+> **CocoaPods:** New versions of the PayHere iOS SDK will no longer be published to CocoaPods after **August 2026**. Previously published CocoaPods versions will remain available, and existing installations will continue to work. Use Swift Package Manager for future SDK updates. See the [migration guide](#migrate-from-cocoapods) for the required steps.
 
 PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your iOS app, without redirecting your app user to the web browser.
 
 ## Contents
--  [Requirements](#Requirements)
--  [Installation](#Installation)
--  [Usage](#Usage)
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Migrate from CocoaPods](#migrate-from-cocoapods)
+- [Swift Package Index](#swift-package-index)
+- [Module migration](#module-migration)
+- [Usage](#usage)
+- [Tests](#tests)
+- [Code of Conduct](#code-of-conduct)
+- [License](#license)
 
 ## Requirements
 - iOS 13.0+
@@ -17,54 +47,41 @@ PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your 
 
 ### Swift Package Manager
 
-[Swift Package Manager](https://swift.org/package-manager/) is a tool for managing the distribution of Swift code. It's integrated with the Swift build system to automate the process of downloading, compiling, and linking dependencies.
+1. In Xcode, select **File > Add Package Dependencies...**.
+2. Enter this repository URL:
 
-To integrate PayHere into your Xcode project using Swift Package Manager:
-
-1. In Xcode, select **File > Add Package Dependencies...**
-2. Enter the package repository URL:
-   ```
+   ```text
    https://github.com/PayHereLK/payhere-mobilesdk-ios.git
    ```
-3. Select the version you want to use
-4. Click **Add Package**
 
-Alternatively, you can add it to your `Package.swift` file:
+3. Select the SDK version and click **Add Package**.
+4. Select the `PayHereSDK` product, assign it to your app target, and click **Add Package**.
+5. Import the SDK:
 
-```swift
-dependencies: [
-    .package(url: "https://github.com/PayHereLK/payhere-mobilesdk-ios.git", from: "3.2.2")
-]
-```
+   ```swift
+   import PayHereSDK
+   ```
 
-### CocoaPods
+### CocoaPods (legacy releases)
 
-[CocoaPods](http://cocoapods.org) is a dependency manager for Cocoa projects. You can install it with the following command:
+Previously published versions remain listed as [`payHereSDK` on CocoaPods](https://cocoapods.org/pods/payHereSDK). CocoaPods distribution ends with the **August 2026** cutoff; new integrations and future SDK updates use Swift Package Manager. The CocoaPods badge reports the version published to CocoaPods, independently of newer Git tags.
 
-```bash
-$ gem install cocoapods
-```
-To integrate PayHere into your Xcode project using CocoaPods, specify it in your `Podfile`:
+### Migrate from CocoaPods
 
-```ruby
-source 'https://github.com/CocoaPods/Specs.git'
-platform :ios, '13.0'
-use_frameworks! # add this line if not present
+1. Remove `pod 'payHereSDK'` from each affected target in your `Podfile`, then run `pod install` to update the integration and lockfile. Keep CocoaPods configuration for any other pods your app still uses.
+2. Follow the [Swift Package Manager installation](#swift-package-manager) steps and link `PayHereSDK` to each target that imports the SDK.
+3. Replace `import payHereSDK` with `import PayHereSDK`. Replace any module-qualified references such as `payHereSDK.StatusResponse` with the corresponding unqualified type after importing the new module.
+4. Replace legacy `PHPresentController` or `PHPrecentController` entry points with `PayHereSDK.present(...)` as described in [Usage](#usage). The legacy controller APIs remain deprecated forwarding wrappers.
+5. Build and test your checkout flow, including sandbox payments and delegate callbacks. Ensure the same target does not link both the CocoaPods and Swift Package Manager copies of PayHere.
 
-target '<Your Target Name>' do
-    pod 'payHereSDK'
-end
-```
-Then, run the following command:
+### Swift Package Index
 
-```bash
-$ pod install
-```
+View PayHere on [Swift Package Index](https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios). Install it using the [Swift Package Manager steps](#swift-package-manager) above.
 
 ## Usage
 Import PayHere SDK into your UIViewController 
 ```swift
-import payHereSDK
+import PayHereSDK
 ```
 ### Create InitRequest
 
@@ -198,15 +215,25 @@ let initRequest = PHInitialRequest(
 ```
 
 ### Present PayHere Payment View
-Pass a configuration for each payment presentation. Both options default to `true` and apply to checkout, recurring payments, preapproval, and hold-on-card payments.
+Configuration is optional. You do not need to create or pass `PHPaymentConfiguration` to integrate the SDK. Without it, the SDK shows the result screen and offers Retry after failed payments.
+
+```swift
+PayHereSDK.present(
+    from: self,
+    withInitRequest: initRequest,
+    delegate: self
+)
+```
+
+Pass a configuration only when customizing that behavior. Both options default to `true` and apply to checkout, recurring payments, preapproval, and hold-on-card payments. For example, show the result screen without Retry:
 
 ```swift
 let configuration = PHPaymentConfiguration(
     showResultScreen: true,
-    showRetryOnResultScreen: true
+    showRetryOnResultScreen: false
 )
 
-PHPrecentController.present(
+PayHereSDK.present(
     from: self,
     withInitRequest: initRequest,
     configuration: configuration,
@@ -223,7 +250,11 @@ PHPrecentController.present(
 
 Result screens are shown only for final statuses: success, failure, or authorization. Pending payments continue checking their status. Retry is never offered for successful or authorized payments. Displayed result screens retain the five-second automatic close behavior.
 
-Configuration values are immutable and scoped to each presentation. Existing `present(from:withInitRequest:shouldShowPaymentStatus:delegate:)` and deprecated `precent(...)` calls remain supported; `shouldShowPaymentStatus` controls the result screen and keeps Retry enabled for failures.
+Set `showResultScreen` to `false` when your app handles the outcome through the delegate callbacks. `showRetryOnResultScreen` is ignored when the result screen is hidden. Configuration applies to each presentation.
+
+### Module Migration
+
+Upgrading from 3.x.x to 4.x.x? Follow the [migration guide](docs/MIGRATION_3_TO_4.md) for product, import, and API changes.
 
 ### Handle Payment Response
 
@@ -242,7 +273,7 @@ extension ViewController : PHViewControllerDelegate{
         }
         if(response.isSuccess()){
             
-            guard let resp = response.getData() as? payHereSDK.StatusResponse else{
+            guard let resp = response.getData() as? StatusResponse else{
                 return
             }
             
@@ -260,14 +291,18 @@ extension ViewController : PHViewControllerDelegate{
 }
 ```
 
-## FAQ
+### Tests
 
-How to fixed [!] Unable to find a specification for payHereSDK issue 
+For local development, open [Demo/Demo.xcodeproj](Demo/Demo.xcodeproj) and run the `demoapp` scheme. The demo uses the Swift package from this checkout, including its resources.
 
-follow the instruction given bellow
+In `Demo/Demo.xcodeproj`, run the `PayHereSDK-Tests` scheme on an iOS Simulator. Xcode resolves the Swift package dependencies when the project opens. The suite uses `demoapp` as its host for UIKit presentation, result configuration, dismissal, and retry tests. SDK requests are intercepted with local responses; these tests do not submit real payments.
 
-```bash
-$ pod repo remove master
-$ pod setup
-$ pod install
-```
+Package-only test runs can execute the configuration and lifecycle tests. UIKit integration tests require the app host and are explicitly skipped without one.
+
+## Code of Conduct
+
+Participation in this project's community is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). It includes expected behavior and instructions for reporting concerns privately.
+
+## License
+
+PayHere Mobile SDK for iOS is licensed under the [Apache License, Version 2.0](LICENSE). Third-party dependencies retain their respective licenses.
