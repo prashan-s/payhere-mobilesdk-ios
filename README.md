@@ -28,7 +28,7 @@ To integrate PayHere into your Xcode project using Swift Package Manager:
    https://github.com/PayHereLK/payhere-mobilesdk-ios.git
    ```
 3. Select the version you want to use
-4. Click **Add Package** and add the `payHereSDK` product to your app target
+4. Click **Add Package** and add the `PayHereSDK` product to your app target
 
 Alternatively, you can add it to your `Package.swift` file:
 
@@ -44,7 +44,7 @@ Add the SDK product to the target that imports it:
 .target(
     name: "YourAppTarget",
     dependencies: [
-        .product(name: "payHereSDK", package: "payhere-mobilesdk-ios")
+        .product(name: "PayHereSDK", package: "payhere-mobilesdk-ios")
     ]
 )
 ```
@@ -52,7 +52,7 @@ Add the SDK product to the target that imports it:
 ## Usage
 Import PayHere SDK into your UIViewController 
 ```swift
-import payHereSDK
+import PayHereSDK
 ```
 ### Create InitRequest
 
@@ -225,6 +225,20 @@ Set `showResultScreen` to `false` when your app handles the outcome through the 
 
 `PayHereSDK` is the canonical payment entry point. `PHPresentController` and the misspelled `PHPrecentController` are deprecated compatibility APIs. For new integrations, use `PayHereSDK.present(...)`. To migrate, replace either legacy controller name with `PayHereSDK`, and rename any `precent(...)` calls to `present(...)`. Calls that customize result behavior use `PayHereSDK.present(..., configuration:delegate:)`. The deprecated `PHPrecentController` methods retain the optional `shouldShowPaymentStatus` argument for source compatibility; it controls the result screen and keeps Retry enabled for failures.
 
+### Module Migration
+
+Use the `PayHereSDK` product and `import PayHereSDK` for all integrations. Update existing integrations by changing both the linked product and import:
+
+```swift
+// Before
+import payHereSDK
+
+// After
+import PayHereSDK
+```
+
+The lowercase `payHereSDK` product remains available as a package-selection compatibility alias, but it exports the `PayHereSDK` module. Update the import even if your dependency declaration still uses the lowercase product. If an existing integration reports `No such module 'payHereSDK'`, replace `import payHereSDK` with `import PayHereSDK`. Swift does not support deprecating an `import` declaration, so this import migration cannot emit a compiler deprecation warning.
+
 ### Handle Payment Response
 
 The SDK delivers one completion callback on the main queue after the payment view is dismissed. Closing a failed result with Retry disabled returns the failed payment response. Cancelling an unfinished payment reports an error. Validation errors detected before presentation are also delivered on the main queue.
@@ -242,7 +256,7 @@ extension ViewController : PHViewControllerDelegate{
         }
         if(response.isSuccess()){
             
-            guard let resp = response.getData() as? payHereSDK.StatusResponse else{
+            guard let resp = response.getData() as? PayHereSDK.StatusResponse else{
                 return
             }
             
