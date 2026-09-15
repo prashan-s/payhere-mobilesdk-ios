@@ -36,7 +36,7 @@ public class PHBottomViewController: UIViewController {
     
     //MARK: - Constants
     private let net = NetworkReachabilityManager(host: "payhere.lk")!
-    
+
     
     
     // MARK: - Variables
@@ -202,55 +202,11 @@ public class PHBottomViewController: UIViewController {
         webView.isMultipleTouchEnabled = false
         
         // Inject viewport meta tag before page loads to prevent zooming
-        let viewportScript = """
-        var meta = document.createElement('meta');
-        meta.name = 'viewport';
-        meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no';
-        document.getElementsByTagName('head')[0].appendChild(meta);
-        """
-        let userScript = WKUserScript(source: viewportScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        let userScript = WKUserScript(source: PHWebViewScripts.viewport,
+                                     injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         webView.configuration.userContentController.addUserScript(userScript)
 
-        // The hosted card form has a fixed container height that leaves empty scrollable space.
-        let cardFormLayoutScript = """
-        (() => {
-            if (location.protocol !== 'https:' ||
-                !['sandbox.payhere.lk', 'www.payhere.lk'].includes(location.hostname) ||
-                !location.pathname.startsWith('/pay/')) {
-                return;
-            }
-
-            const form = document.querySelector('body > .container > form#paymentForm');
-            const fieldSets = [
-                ['cardHolderName', 'cardNo', 'cardSecureId', 'cardExpiry'],
-                ['cardholder-name', 'card-number', 'cardSecureId', 'expiry-month', 'expiry-year']
-            ];
-            if (!form || !fieldSets.some(fields => fields.every(id => form.querySelector('#' + id)))) {
-                return;
-            }
-
-            form.parentElement.style.setProperty('height', 'auto', 'important');
-            form.parentElement.setAttribute('data-payhere-sdk-card-form', '');
-
-            // The submit button is pulled above its fixed-height footer by the hosted CSS.
-            // Let that empty footer size naturally without changing the button's baseline.
-            const payButton = form.querySelector('button#payButton.btn-primary, button[type="submit"].btn-primary');
-            if (payButton && payButton.type === 'submit') {
-                payButton.setAttribute('data-payhere-sdk-card-submit', '');
-            }
-            const footer = payButton && payButton.parentElement;
-            if (footer && footer.parentElement === form && footer === form.lastElementChild &&
-                footer.matches('.form-group') && footer.children.length === 1 &&
-                footer.textContent.trim() === payButton.textContent.trim()) {
-                const buttonBounds = payButton.getBoundingClientRect();
-                if (buttonBounds.height > 0 && buttonBounds.bottom <= footer.getBoundingClientRect().top) {
-                    footer.style.setProperty('height', 'auto', 'important');
-                    footer.style.setProperty('margin-bottom', '0', 'important');
-                }
-            }
-        })();
-        """
-        let cardFormLayout = WKUserScript(source: cardFormLayoutScript,
+        let cardFormLayout = WKUserScript(source: PHWebViewScripts.cardFormLayout,
                                           injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         webView.configuration.userContentController.addUserScript(cardFormLayout)
         
@@ -1476,26 +1432,7 @@ extension PHBottomViewController : WKUIDelegate,WKNavigationDelegate{
     }
 
     private func finishWebLayout(in webView: WKWebView, navigation: WKNavigation?) {
-        let script = """
-        (() => {
-            window.scrollTo(0, 0);
-            const container = document.querySelector('body > .container[data-payhere-sdk-card-form]');
-            if (!container) return null;
-
-            const bounds = container.getBoundingClientRect();
-            const payButton = container.querySelector('button[data-payhere-sdk-card-submit]');
-            const buttonBounds = payButton && payButton.getBoundingClientRect();
-            // A fixed-height footer can be shorter than its visible submit button.
-            const contentBottom = Math.max(bounds.bottom, bounds.top + container.scrollHeight,
-                                           buttonBounds ? buttonBounds.bottom : bounds.bottom);
-            return {
-                height: Math.ceil(contentBottom + window.scrollY),
-                bottomSpacing: buttonBounds && buttonBounds.height > 0
-                    ? Math.max(0, contentBottom - buttonBounds.bottom) : 0
-            };
-        })();
-        """
-        webView.evaluateJavaScript(script) { [weak self] result, _ in
+        webView.evaluateJavaScript(PHWebViewScripts.cardFormMeasurement) { [weak self] result, _ in
             guard let self = self, self.ownsNavigation(navigation) else { return }
 
             if let layout = result as? [String: Double],
