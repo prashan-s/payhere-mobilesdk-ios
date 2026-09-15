@@ -11,7 +11,7 @@ import Foundation
 /// A checkout error with a display message.
 /// Recognized server error messages are preserved verbatim; SDK-generated errors use nontechnical text.
 public struct PHPaymentError: Error {
-    internal enum Reason: String {
+    public enum Reason: String {
         // User action
         case userCancelled = "user_cancelled"
 
@@ -36,7 +36,7 @@ public struct PHPaymentError: Error {
         case paymentCannotContinue = "payment_cannot_continue"
     }
 
-    internal let reason: Reason
+    public let reason: Reason
     internal let code: Int?
     /// A recognized server error's original message, including empty strings. Nil means none was available.
     internal let serverMessage: String?

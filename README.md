@@ -79,6 +79,9 @@ Previously published versions remain listed as [`payHereSDK` on CocoaPods](https
 View PayHere on [Swift Package Index](https://swiftpackageindex.com/PayHereLK/payhere-mobilesdk-ios). Install it using the [Swift Package Manager steps](#swift-package-manager) above.
 
 ## Usage
+
+See the [Demo sample](Demo/Demo/ViewController.swift) for integration code, including payment callbacks and cancellation handling.
+
 Import PayHere SDK into your UIViewController 
 ```swift
 import PayHereSDK
@@ -262,9 +265,9 @@ Upgrading from 3.x.x to 4.x.x? Follow the [migration guide](Docs/MIGRATION_3_TO_
 
 Implement both `PayHereSDKDelegate` callbacks. The SDK delivers one completion callback on the main queue after dismissal; validation errors before presentation also arrive on the main queue.
 
-`didReceive` returns successful, authorized, and failed final results, including when the user closes the result screen. Closing an unfinished checkout, including confirming **Exit Now**, calls `didFailWith` with the same cancellation message (internal reason: `user_cancelled`). This does not confirm bank cancellation. Verify an unknown payment status before offering another attempt.
+`didReceive` returns successful, authorized, and failed final results, including when the user closes the result screen. Closing an unfinished checkout, including confirming **Exit Now**, calls `didFailWith` with `error.reason == .userCancelled`. This does not confirm bank cancellation. Verify an unknown payment status before offering another attempt.
 
-`PHPaymentError.message` is the only public error field. Display it directly; do not parse it or use `localizedDescription`. Recognized server messages are preserved exactly, including empty strings; raw response bodies and HTML are excluded.
+Use `PHPaymentError.reason` to handle specific errors and `message` for display; do not parse the message or use `localizedDescription`. Recognized server messages are preserved exactly, including empty strings; raw response bodies and HTML are excluded. Numeric codes and server-message storage remain internal.
 
 ```swift
 extension ViewController: PayHereSDKDelegate {
