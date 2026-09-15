@@ -1,13 +1,37 @@
 # PayHere Mobile SDK for iOS
-[![Language](https://img.shields.io/badge/Language-swift-orange?style=flat-square)](https://developer.apple.com/swift) [![Platforms](https://img.shields.io/badge/Platform-iOS_13%2B-blue?style=flat-square)](https://developer.apple.com/ios) [![Swift Package Manager](https://img.shields.io/badge/Swift_Package_Manager-compatible-orange?style=flat-square)](https://swift.org/package-manager/)
+
+<p>
+  <a href="https://cocoapods.org/pods/payHereSDK">
+    <img src="https://img.shields.io/cocoapods/v/payHereSDK?style=flat&amp;label=CocoaPods" alt="CocoaPods version (legacy releases)"/>
+  </a>
+  <a href="https://github.com/PayHereLK/payhere-mobilesdk-ios/tags">
+    <img src="https://img.shields.io/github/v/tag/PayHereLK/payhere-mobilesdk-ios?style=flat&amp;label=Swift%20Package%20Manager" alt="Latest SDK tag"/>
+  </a>
+  <a href="#swift-package-index">
+    <img src="https://img.shields.io/badge/Swift%20Package%20Index-pending%20submission-orange?style=flat" alt="Swift Package Index: pending submission"/>
+  </a>
+  <a href="https://developer.apple.com/ios">
+    <img src="https://img.shields.io/badge/Platform-iOS_13%2B-blue?style=flat" alt="iOS 13 and later"/>
+  </a>
+  <a href="https://developer.apple.com/swift">
+    <img src="https://img.shields.io/badge/Language-Swift-orange?style=flat" alt="Swift"/>
+  </a>
+</p>
+
+> [!WARNING]
+> **CocoaPods:** New versions of the PayHere iOS SDK will no longer be published to CocoaPods after **August 2026**. Previously published CocoaPods versions will remain available, and existing installations will continue to work. Use Swift Package Manager for future SDK updates. See the [migration guide](#migrate-from-cocoapods) for the required steps.
 
 PayHere Mobile SDK for iOS allows you to accept payments seamlessly within your iOS app, without redirecting your app user to the web browser.
 
 ## Contents
--  [Requirements](#Requirements)
--  [Installation](#Installation)
--  [Usage](#Usage)
--  [Tests](#tests)
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Migrate from CocoaPods](#migrate-from-cocoapods)
+- [Swift Package Index](#swift-package-index)
+- [Module migration](#module-migration)
+- [Usage](#usage)
+- [Tests](#tests)
 
 ## Requirements
 - iOS 13.0+
@@ -27,18 +51,18 @@ To integrate PayHere into your Xcode project using Swift Package Manager:
    ```
    https://github.com/PayHereLK/payhere-mobilesdk-ios.git
    ```
-3. Select the version you want to use
+3. Select a release that contains the `PayHereSDK` product and module
 4. Click **Add Package** and add the `PayHereSDK` product to your app target
 
-Alternatively, you can add it to your `Package.swift` file:
+The module rename documented here is newer than tag `3.2.2`, which still uses `payHereSDK`. A package pinned to that tag cannot use `import PayHereSDK`. Select a release containing the rename once published. To test this checkout before that release, use Xcode's **Add Local...** package option, or a local dependency in your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/PayHereLK/payhere-mobilesdk-ios.git", from: "3.2.2")
+    .package(path: "../payhere-mobilesdk-ios")
 ]
 ```
 
-Add the SDK product to the target that imports it:
+For either a released package containing the rename or this local checkout, add the SDK product to the target that imports it:
 
 ```swift
 .target(
@@ -48,6 +72,22 @@ Add the SDK product to the target that imports it:
     ]
 )
 ```
+
+### CocoaPods (legacy releases)
+
+Previously published versions remain listed as [`payHereSDK` on CocoaPods](https://cocoapods.org/pods/payHereSDK). CocoaPods distribution ends with the **August 2026** cutoff; new integrations and future SDK updates use Swift Package Manager. The CocoaPods badge reports the version published to CocoaPods, independently of newer Git tags.
+
+### Migrate from CocoaPods
+
+1. Remove `pod 'payHereSDK'` from each affected target in your `Podfile`, then run `pod install` to update the integration and lockfile. Keep CocoaPods configuration for any other pods your app still uses.
+2. Follow the [Swift Package Manager installation](#swift-package-manager) steps and link the `PayHereSDK` product to every app, extension, or test target that imports the SDK. Use a version containing the module rename, or this local checkout while that release is pending.
+3. Replace `import payHereSDK` with `import PayHereSDK`. Replace any module-qualified references such as `payHereSDK.StatusResponse` with the corresponding unqualified type after importing the new module.
+4. Replace legacy `PHPresentController` or `PHPrecentController` entry points with `PayHereSDK.present(...)` as described in [Usage](#usage). The legacy controller APIs remain deprecated forwarding wrappers.
+5. Build and test your checkout flow, including sandbox payments and delegate callbacks. Ensure the same target does not link both the CocoaPods and Swift Package Manager copies of PayHere.
+
+### Swift Package Index
+
+Swift Package Index submission is pending. This checkout includes [.spi.yml](.spi.yml) to generate iOS API documentation for the `PayHereSDK` target. Maintainers can follow the [submission checklist](docs/SWIFT_PACKAGE_INDEX.md) to publish the renamed module, submit the canonical repository, and enable live platform and Swift-version badges after indexing. Swift Package Manager remains the installation mechanism.
 
 ## Usage
 Import PayHere SDK into your UIViewController 
@@ -256,7 +296,7 @@ extension ViewController : PHViewControllerDelegate{
         }
         if(response.isSuccess()){
             
-            guard let resp = response.getData() as? PayHereSDK.StatusResponse else{
+            guard let resp = response.getData() as? StatusResponse else{
                 return
             }
             
