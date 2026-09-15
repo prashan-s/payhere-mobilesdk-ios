@@ -254,7 +254,7 @@ Set `showResultScreen` to `false` when your app handles the outcome through the 
 
 ### Module Migration
 
-Upgrading from 3.x.x to 4.x.x? Follow the [migration guide](docs/MIGRATION_3_TO_4.md) for product, import, and API changes.
+Upgrading from 3.x.x to 4.x.x? Follow the [migration guide](Docs/MIGRATION_3_TO_4.md) for product, import, and API changes.
 
 ### Handle Payment Response
 
