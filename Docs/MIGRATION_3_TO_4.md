@@ -85,11 +85,13 @@ extension ViewController: PayHereSDKDelegate {
 
 Keep the delegate alive until checkout completes; the SDK holds it weakly. Callbacks run once on the main queue after dismissal. Preflight errors may arrive synchronously before `present(...)` returns, so prepare callback state first.
 
-### Public error message
+See the [Demo sample](../Demo/Demo/ViewController.swift) for integration code, including payment callbacks and cancellation handling.
 
-`PHPaymentError` conforms to `Error` and exposes only `message: String`. Use `error.message` instead of `localizedDescription` or the removed `errorDescription`; it no longer conforms to `LocalizedError`.
+### Public error handling
 
-`reason`, `code`, and `serverMessage` are internal. `category`, `stage`, `serverStatusCode`, and `httpStatusCode` are removed. Display the message without parsing it for error classification or payment status.
+`PHPaymentError` conforms to `Error` and exposes `reason: PHPaymentError.Reason` and `message: String`. Use `reason` to handle specific errors and `message` for display instead of `localizedDescription` or the removed `errorDescription`; it no longer conforms to `LocalizedError`.
+
+`code` and `serverMessage` remain internal. `category`, `stage`, `serverStatusCode`, and `httpStatusCode` are removed. Do not parse the message for error classification or payment status.
 
 Recognized server errors preserve their exact `msg`, including empty strings. This covers initialization/submission rejections and recognized JSON errors on HTTP 400–599. Other failures use SDK messages; raw bodies, HTML, and successful-response text are not displayed as errors.
 
@@ -100,5 +102,5 @@ Recognized server errors preserve their exact `msg`, including empty strings. Th
 ### Payment outcomes and closing
 
 - `didReceive` delivers nonoptional final successful, authorized, or failed results. Closing after a final result still delivers that result, never a closure error.
-- `didFailWith` handles SDK errors and closure before a final result. Ordinary cancellation and confirmed **Exit Now** share the internal reason `user_cancelled` and the same display message; only `message` is public.
+- `didFailWith` handles SDK errors and closure before a final result. Ordinary cancellation and confirmed **Exit Now** share `.userCancelled` (raw value: `user_cancelled`) and the same display message.
 - Status checks that previously returned a `nil` response now report an error. An error or closed window does not confirm bank cancellation or payment failure; verify an unknown status before retrying.

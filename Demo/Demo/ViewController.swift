@@ -193,11 +193,19 @@ class ViewController: UIViewController {
 
 extension ViewController: PayHereSDKDelegate {
 
-    // Display the public error message for SDK failures or closure before a final result.
-    // Final payment results arrive through `didReceive`; errors do not confirm failure.
-    // Verify an unknown payment status before offering another payment attempt.
+    // Handles SDK errors and user cancellation before a final payment result is available.
+    // Final results arrive through `didReceive`; an error does not confirm payment failure.
+    // If the payment status is unknown, verify it before offering another attempt.
     func payHereSDK(didFailWith error: PHPaymentError) {
-        showPaymentError(message: error.message)
+
+        switch error.reason {
+        case .userCancelled:
+            // The user closed bottom sheet; this does not confirm cancellation by the bank.
+            showPaymentError(message: error.message)
+        default:
+            showPaymentError(message: error.message)
+        }
+
     }
 
  
