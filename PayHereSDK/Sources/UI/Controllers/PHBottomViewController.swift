@@ -44,7 +44,7 @@ public class PHBottomViewController: UIViewController {
     internal var isSandBoxEnabled                   : Bool                          = false
     internal var orgHeight                          : CGFloat                       = 0
     internal var keyBoardHeightMax                  : CGFloat                       = 0
-    internal var configuration = PHPaymentConfiguration()
+    internal var configuration                      : PHPaymentConfiguration        = .default
     internal var networkSession: Session = AF
     
     private var ignoreProgressBarInNextNavigation   : Bool                          = false
@@ -56,6 +56,8 @@ public class PHBottomViewController: UIViewController {
     private var statusRequest: DataRequest?
     private var requestID = UUID()
     private var activeNavigation: WKNavigation?
+    private var isHostedCardForm = false
+    private var cardFormBottomSpacingReduction: CGFloat = 0
     private let navigationAttempts = NSMapTable<WKNavigation, NSUUID>.weakToStrongObjects()
     private var waitUntilPaymentUI                  : WaitUntil!
     private var initialBottomConstant               : CGFloat                       = 0
@@ -208,6 +210,49 @@ public class PHBottomViewController: UIViewController {
         """
         let userScript = WKUserScript(source: viewportScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
         webView.configuration.userContentController.addUserScript(userScript)
+
+        // The hosted card form has a fixed container height that leaves empty scrollable space.
+        let cardFormLayoutScript = """
+        (() => {
+            if (location.protocol !== 'https:' ||
+                !['sandbox.payhere.lk', 'www.payhere.lk'].includes(location.hostname) ||
+                !location.pathname.startsWith('/pay/')) {
+                return;
+            }
+
+            const form = document.querySelector('body > .container > form#paymentForm');
+            const fieldSets = [
+                ['cardHolderName', 'cardNo', 'cardSecureId', 'cardExpiry'],
+                ['cardholder-name', 'card-number', 'cardSecureId', 'expiry-month', 'expiry-year']
+            ];
+            if (!form || !fieldSets.some(fields => fields.every(id => form.querySelector('#' + id)))) {
+                return;
+            }
+
+            form.parentElement.style.setProperty('height', 'auto', 'important');
+            form.parentElement.setAttribute('data-payhere-sdk-card-form', '');
+
+            // The submit button is pulled above its fixed-height footer by the hosted CSS.
+            // Let that empty footer size naturally without changing the button's baseline.
+            const payButton = form.querySelector('button#payButton.btn-primary, button[type="submit"].btn-primary');
+            if (payButton && payButton.type === 'submit') {
+                payButton.setAttribute('data-payhere-sdk-card-submit', '');
+            }
+            const footer = payButton && payButton.parentElement;
+            if (footer && footer.parentElement === form && footer === form.lastElementChild &&
+                footer.matches('.form-group') && footer.children.length === 1 &&
+                footer.textContent.trim() === payButton.textContent.trim()) {
+                const buttonBounds = payButton.getBoundingClientRect();
+                if (buttonBounds.height > 0 && buttonBounds.bottom <= footer.getBoundingClientRect().top) {
+                    footer.style.setProperty('height', 'auto', 'important');
+                    footer.style.setProperty('margin-bottom', '0', 'important');
+                }
+            }
+        })();
+        """
+        let cardFormLayout = WKUserScript(source: cardFormLayoutScript,
+                                          injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+        webView.configuration.userContentController.addUserScript(cardFormLayout)
         
         
         let helaPayNib = UINib(nibName: "PayWithHelaPayTableViewCell", bundle: Bundle.payHereBundle)
@@ -274,25 +319,19 @@ public class PHBottomViewController: UIViewController {
         // Ensure layout is up to date to get correct safeAreaInsets
         self.view.layoutIfNeeded()
         
-        let keyboardScreenEndFrame = keyboardValue.cgRectValue
-        
-        // Convert keyboard frame to view's coordinate system
-        let keyboardViewEndFrame = view.convert(keyboardScreenEndFrame, from: nil)
-        
-        let extraSpaceBottom = 5.0
-        let keyboardHeight = keyboardViewEndFrame.height
-        
-        // Calculate how much of the keyboard is "inside" the safe area (above the bottom inset)
-        // If Keyboard Height = 0 (hidden), Overlap = 0.
-        
-        let overlap = max(0, keyboardHeight + extraSpaceBottom)
-        
+        guard let window = view.window else { return }
+        let keyboardViewEndFrame = view.convert(keyboardValue.cgRectValue,
+                                                from: window.screen.coordinateSpace)
+        let intersection = view.bounds.intersection(keyboardViewEndFrame)
+        let overlap = !intersection.isNull && intersection.maxY >= view.bounds.maxY
+            ? intersection.height : 0
+
         self.bottomConstraint.constant = overlap
         
         // Calculate available height
         // Screen Height - Safe Area Top - Overlap
         let safeAreaTop = view.safeAreaInsets.top
-        let availableHeight = view.frame.height - safeAreaTop - overlap
+        let availableHeight = max(0, view.bounds.height - safeAreaTop - overlap)
         
         if self.orgHeight > availableHeight {
             self.height.constant = availableHeight
@@ -360,6 +399,9 @@ public class PHBottomViewController: UIViewController {
         statusRequest?.cancel()
         statusRequest = nil
         activeNavigation = nil
+        isHostedCardForm = false
+        cardFormBottomSpacingReduction = 0
+        webView?.scrollView.contentInset.bottom = 0
         webView?.stopLoading()
     }
 
@@ -1373,6 +1415,9 @@ extension PHBottomViewController : WKUIDelegate,WKNavigationDelegate{
             navigationAttempts.setObject(requestID as NSUUID, forKey: navigation)
         }
         activeNavigation = navigation
+        isHostedCardForm = false
+        cardFormBottomSpacingReduction = 0
+        webView.scrollView.contentInset.bottom = 0
         webView.isHidden = !ignoreProgressBarInNextNavigation
         progressBar.isHidden = ignoreProgressBarInNextNavigation
     }
@@ -1425,22 +1470,75 @@ extension PHBottomViewController : WKUIDelegate,WKNavigationDelegate{
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard ownsNavigation(navigation) else { return }
-        insertCSSString(into: webView)
+        finishWebLayout(in: webView, navigation: navigation)
         webView.isHidden = false
         progressBar.isHidden = true
     }
 
-    private func insertCSSString(into webView: WKWebView) {
-        // Viewport meta tag is now injected via WKUserScript at document start
-        // This method now only handles additional CSS if needed in the future
-        
-        // Scroll to top to ensure consistent view
-        webView.evaluateJavaScript("window.scrollTo(0,0)", completionHandler: nil)
+    private func finishWebLayout(in webView: WKWebView, navigation: WKNavigation?) {
+        let script = """
+        (() => {
+            window.scrollTo(0, 0);
+            const container = document.querySelector('body > .container[data-payhere-sdk-card-form]');
+            if (!container) return null;
+
+            const bounds = container.getBoundingClientRect();
+            const payButton = container.querySelector('button[data-payhere-sdk-card-submit]');
+            const buttonBounds = payButton && payButton.getBoundingClientRect();
+            // A fixed-height footer can be shorter than its visible submit button.
+            const contentBottom = Math.max(bounds.bottom, bounds.top + container.scrollHeight,
+                                           buttonBounds ? buttonBounds.bottom : bounds.bottom);
+            return {
+                height: Math.ceil(contentBottom + window.scrollY),
+                bottomSpacing: buttonBounds && buttonBounds.height > 0
+                    ? Math.max(0, contentBottom - buttonBounds.bottom) : 0
+            };
+        })();
+        """
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self = self, self.ownsNavigation(navigation) else { return }
+
+            if let layout = result as? [String: Double],
+               let contentHeight = layout["height"], contentHeight.isFinite, contentHeight > 0,
+               let bottomSpacing = layout["bottomSpacing"], bottomSpacing.isFinite, bottomSpacing >= 0 {
+                self.isHostedCardForm = true
+                // Only remove empty space; the newer form places Pay at the content's bottom.
+                self.cardFormBottomSpacingReduction = min(20, CGFloat(bottomSpacing))
+                // Trim the matching scroll inset so a shorter sheet adds no empty scroll range.
+                webView.scrollView.contentInset.bottom = -self.cardFormBottomSpacingReduction
+                self.view.layoutIfNeeded()
+                let chromeHeight = self.bottomView.bounds.height - webView.bounds.height
+                // Store the resting height even if a field is focused during page load.
+                let bottomInset = max(webView.scrollView.contentInset.bottom, self.view.safeAreaInsets.bottom)
+                let maximumHeight = max(0, self.view.bounds.height - self.view.safeAreaInsets.top)
+                let fittedHeight = min(CGFloat(contentHeight) + chromeHeight + bottomInset, maximumHeight)
+                self.orgHeight = max(0, fittedHeight - self.cardFormBottomSpacingReduction)
+                self.height.constant = min(self.orgHeight, max(0, maximumHeight - self.bottomConstraint.constant))
+                self.view.layoutIfNeeded()
+            }
+
+        }
     }
     
 }
 
 extension PHBottomViewController : UIScrollViewDelegate {
+    public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard isHostedCardForm, scrollView === webView.scrollView,
+              bottomConstraint.constant > 0 else { return }
+
+        // The sheet is already above the keyboard. WebKit can still include the
+        // keyboard in adjustedContentInset, allowing scrolling far beyond the form.
+        let minimumY = -scrollView.adjustedContentInset.top
+        let bottomInset = max(scrollView.contentInset.bottom,
+                              webView.safeAreaInsets.bottom - cardFormBottomSpacingReduction)
+        let maximumY = max(minimumY, scrollView.contentSize.height - scrollView.bounds.height + bottomInset)
+        let offsetY = min(max(scrollView.contentOffset.y, minimumY), maximumY)
+        if scrollView.contentOffset.y != offsetY {
+            scrollView.contentOffset.y = offsetY
+        }
+    }
+
     // Prevent zooming by returning nil for viewForZooming
     public func viewForZooming(in scrollView: UIScrollView) -> UIView? {
         return nil
