@@ -1,4 +1,6 @@
 version: 1
+metadata:
+  authors: PayHereLK
 builder:
   configs:
     - platform: ios
