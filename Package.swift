@@ -15,7 +15,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.10.2"),
+        .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.12.2"),
         .package(url: "https://github.com/tristanhimmelman/ObjectMapper.git", from: "4.2.0"),
         .package(url: "https://github.com/SDWebImage/SDWebImage.git", from: "5.0.0")
     ],
