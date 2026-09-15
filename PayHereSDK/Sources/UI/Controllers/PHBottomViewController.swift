@@ -1342,6 +1342,14 @@ public class PHBottomViewController: UIViewController {
         guard lifecycle.receiveTerminalStatus(response.getStatusState()) else { return }
         statusResponse = response
         cancelPendingWork()
+        switch response.getStatusState() {
+        case .SUCCESS?:
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case .FAILED?:
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        default:
+            break
+        }
         let displayResult = { [weak self] in
             guard let self = self, self.lifecycle.phase == .result else { return }
             if self.configuration.showResultScreen {
