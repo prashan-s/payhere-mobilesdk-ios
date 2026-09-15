@@ -189,7 +189,7 @@ let initRequest = PHInitialRequest(
 Configuration is optional. You do not need to create or pass `PHPaymentConfiguration` to integrate the SDK. Without it, the SDK shows the result screen and offers Retry after failed payments.
 
 ```swift
-PHPresentController.present(
+PayHereSDK.present(
     from: self,
     withInitRequest: initRequest,
     delegate: self
@@ -204,7 +204,7 @@ let configuration = PHPaymentConfiguration(
     showRetryOnResultScreen: false
 )
 
-PHPresentController.present(
+PayHereSDK.present(
     from: self,
     withInitRequest: initRequest,
     configuration: configuration,
@@ -223,7 +223,7 @@ Result screens are shown only for final statuses: success, failure, or authoriza
 
 Set `showResultScreen` to `false` when your app handles the outcome through the delegate callbacks. `showRetryOnResultScreen` is ignored when the result screen is hidden. Configuration applies to each presentation.
 
-`PHPresentController` replaces the misspelled `PHPrecentController`. For new integrations, use `PHPresentController.present(...)`. To migrate existing integrations, replace `PHPrecentController` with `PHPresentController` and rename any `precent(...)` calls to `present(...)`. Calls that pass `configuration` must use `PHPresentController`. The deprecated class retains its `present` and `precent` methods with the optional `shouldShowPaymentStatus` argument for compatibility. That argument controls the result screen and keeps Retry enabled for failures.
+`PayHereSDK` is the canonical payment entry point. `PHPresentController` and the misspelled `PHPrecentController` are deprecated compatibility APIs. For new integrations, use `PayHereSDK.present(...)`. To migrate, replace either legacy controller name with `PayHereSDK`, and rename any `precent(...)` calls to `present(...)`. Calls that customize result behavior use `PayHereSDK.present(..., configuration:delegate:)`. The deprecated `PHPrecentController` methods retain the optional `shouldShowPaymentStatus` argument for source compatibility; it controls the result screen and keeps Retry enabled for failures.
 
 ### Handle Payment Response
 

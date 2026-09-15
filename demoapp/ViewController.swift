@@ -59,8 +59,8 @@ class ViewController: UIViewController {
         )
 
         // To use SDK defaults, omit the configuration argument:
-        // PHPresentController.present(from: self, withInitRequest: initRequest!, delegate: self)
-        PHPresentController.present(from: self, withInitRequest: initRequest!,
+        // PayHereSDK.present(from: self, withInitRequest: initRequest!, delegate: self)
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
                                     configuration: paymentConfiguration,
                                     delegate: self)
     }
@@ -98,7 +98,7 @@ class ViewController: UIViewController {
             showRetryOnResultScreen: true
         )
 
-        PHPresentController.present(from: self, withInitRequest: initRequest!,
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
                                     configuration: paymentConfiguration,
                                     delegate: self)
     }
@@ -139,7 +139,7 @@ class ViewController: UIViewController {
             showRetryOnResultScreen: true
         )
 
-        PHPresentController.present(from: self,
+        PayHereSDK.present(from: self,
                                     withInitRequest: initRequest!,
                                     configuration: paymentConfiguration,
                                     delegate: self)
@@ -184,7 +184,7 @@ class ViewController: UIViewController {
             showRetryOnResultScreen: true
         )
 
-        PHPresentController.present(from: self,
+        PayHereSDK.present(from: self,
                                     withInitRequest: initRequest!,
                                     configuration: paymentConfiguration,
                                     delegate: self)

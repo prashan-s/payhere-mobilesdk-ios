@@ -139,8 +139,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         ]
 
         for configuration in configurations {
-            PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
-                                        configuration: configuration, delegate: delegate)
+            PayHereSDK.present(from: presenter, withInitRequest: makeRequest(),
+                               configuration: configuration, delegate: delegate)
         }
 
         XCTAssertEqual(presenter.capturedControllers.count, configurations.count)
@@ -157,11 +157,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         let presenter = CapturingPresenter()
         let delegate = UnexpectedPaymentDelegate()
 
+        PayHereSDK.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPresentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
-        PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
-                                    shouldShowPaymentStatus: true, delegate: delegate)
-        PHPresentController.present(from: presenter, withInitRequest: makeRequest(),
-                                    shouldShowPaymentStatus: false, delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(), delegate: delegate)
         PHPrecentController.present(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: true, delegate: delegate)
@@ -170,8 +167,8 @@ final class PHPaymentLifecycleTests: XCTestCase {
         PHPrecentController.precent(from: presenter, withInitRequest: makeRequest(),
                                     shouldShowPaymentStatus: false, delegate: delegate)
 
-        XCTAssertEqual(presenter.capturedControllers.count, 7)
-        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, false, true, true, false, false]) {
+        XCTAssertEqual(presenter.capturedControllers.count, 6)
+        for (controller, expectedResult) in zip(presenter.capturedControllers, [true, true, true, true, false, false]) {
             let payment = try XCTUnwrap(controller as? PHBottomViewController)
             XCTAssertEqual(payment.configuration.showResultScreen, expectedResult)
             XCTAssertTrue(payment.configuration.showRetryOnResultScreen)
