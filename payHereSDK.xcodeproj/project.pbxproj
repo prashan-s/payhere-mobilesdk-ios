@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2823B1AD279E2755029A8C76 /* payHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4FC96A3974C7EB114D4B7DF5 /* payHereSDK */; };
+		2823B1AD279E2755029A8C76 /* PayHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4FC96A3974C7EB114D4B7DF5 /* PayHereSDK */; };
 		3B1E2C3EDAB0A361D38F70DB /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = CC82AAAB043326136DC29BE9 /* Alamofire */; };
 		98AF276E74381C57CBE9B21D /* ObjectMapper in Frameworks */ = {isa = PBXBuildFile; productRef = 0C3464A194D8F02BA4FFB370 /* ObjectMapper */; };
 		D75F6530B90189C1F6099185 /* PHPaymentLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB453E9E8B5462A447E5C7BF /* PHPaymentLifecycleTests.swift */; };
-		FC71BE1C04A144047E2DE553 /* payHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5BD3094A48B55D101986CD76 /* payHereSDK */; };
+		FC71BE1C04A144047E2DE553 /* PayHereSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5BD3094A48B55D101986CD76 /* PayHereSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,7 +53,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2823B1AD279E2755029A8C76 /* payHereSDK in Frameworks */,
+				2823B1AD279E2755029A8C76 /* PayHereSDK in Frameworks */,
 				3B1E2C3EDAB0A361D38F70DB /* Alamofire in Frameworks */,
 				98AF276E74381C57CBE9B21D /* ObjectMapper in Frameworks */,
 			);
@@ -63,7 +63,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FC71BE1C04A144047E2DE553 /* payHereSDK in Frameworks */,
+				FC71BE1C04A144047E2DE553 /* PayHereSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,7 +125,7 @@
 			);
 			name = payHereSDKTests;
 			packageProductDependencies = (
-				4FC96A3974C7EB114D4B7DF5 /* payHereSDK */,
+				4FC96A3974C7EB114D4B7DF5 /* PayHereSDK */,
 				CC82AAAB043326136DC29BE9 /* Alamofire */,
 				0C3464A194D8F02BA4FFB370 /* ObjectMapper */,
 			);
@@ -150,7 +150,7 @@
 			);
 			name = demoapp;
 			packageProductDependencies = (
-				5BD3094A48B55D101986CD76 /* payHereSDK */,
+				5BD3094A48B55D101986CD76 /* PayHereSDK */,
 			);
 			productName = demoapp;
 			productReference = C793DE5D23C717C900666008 /* demoapp.app */;
@@ -486,15 +486,15 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = ObjectMapper;
 		};
-		4FC96A3974C7EB114D4B7DF5 /* payHereSDK */ = {
+		4FC96A3974C7EB114D4B7DF5 /* PayHereSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4505D6275A541670076490ED /* XCLocalSwiftPackageReference "." */;
-			productName = payHereSDK;
+			productName = PayHereSDK;
 		};
-		5BD3094A48B55D101986CD76 /* payHereSDK */ = {
+		5BD3094A48B55D101986CD76 /* PayHereSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4505D6275A541670076490ED /* XCLocalSwiftPackageReference "." */;
-			productName = payHereSDK;
+			productName = PayHereSDK;
 		};
 		CC82AAAB043326136DC29BE9 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;

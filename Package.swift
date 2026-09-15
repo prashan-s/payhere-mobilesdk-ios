@@ -4,14 +4,18 @@
 import PackageDescription
 
 let package = Package(
-    name: "payHereSDK",
+    name: "PayHereSDK",
     platforms: [
         .iOS(.v13)
     ],
     products: [
         .library(
+            name: "PayHereSDK",
+            targets: ["PayHereSDK"]
+        ),
+        .library(
             name: "payHereSDK",
-            targets: ["payHereSDK"]
+            targets: ["PayHereSDK"]
         )
     ],
     dependencies: [
@@ -21,7 +25,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "payHereSDK",
+            name: "PayHereSDK",
             dependencies: [
                 "Alamofire",
                 "ObjectMapper",
@@ -34,7 +38,7 @@ let package = Package(
         ),
         .testTarget(
             name: "payHereSDKTests",
-            dependencies: ["payHereSDK", "ObjectMapper", "Alamofire"],
+            dependencies: ["PayHereSDK", "ObjectMapper", "Alamofire"],
             path: "Tests/payHereSDKTests"
         )
     ],

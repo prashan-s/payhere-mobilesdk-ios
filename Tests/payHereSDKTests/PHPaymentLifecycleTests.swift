@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 import ObjectMapper
 import Alamofire
-@testable import payHereSDK
+@testable import PayHereSDK
 
 final class PHPaymentLifecycleTests: XCTestCase {
     func testConfigurationPreservesExistingDefaults() {
