@@ -10,16 +10,16 @@ import Foundation
 
 class PHConfigs {
     
-    internal static let LIVE_URL : String = "https://www.payhere.lk/pay/"
+    internal static let LIVE_URL    : String = "https://www.payhere.lk/pay/"
     internal static let SANDBOX_URL : String = "https://sandbox.payhere.lk/pay/"
     
     
-    internal static let CHECKOUT : String =  "checkout";
-    internal static let STATUS : String =  "order_status";
-    internal static let INITNSUBMIT : String =  "api/payment/initAndSubmit"
-    internal static let INIT : String = "api/payment/v2/init"
-    internal static let SUBMIT : String = "api/payment/submit"
-    //public static let UI : String = "api/data/paymentMethods"
+    internal static let CHECKOUT    : String = "checkout";
+    internal static let STATUS      : String = "order_status";
+    internal static let INITNSUBMIT : String = "api/payment/initAndSubmit"
+    internal static let INIT        : String = "api/payment/v2/init"
+    internal static let SUBMIT      : String = "api/payment/submit"
+    //public static let UI          : String = "api/data/paymentMethods"
     
     internal static let kFontSize = 16.0
     

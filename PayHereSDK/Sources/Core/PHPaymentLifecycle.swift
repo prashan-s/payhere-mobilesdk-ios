@@ -1,3 +1,11 @@
+//
+//  PHPaymentLifecycle.swift
+//  payHereSDK
+//
+//  Created by Prashan Samarathunge on 2026-10-14.
+//  Copyright © 2026 PayHere. All rights reserved.
+//
+
 import Foundation
 
 /// Serializes attempt ownership and terminal delivery with the payment UI.
