@@ -260,66 +260,37 @@ Upgrading from 3.x.x to 4.x.x? Follow the [migration guide](Docs/MIGRATION_3_TO_
 
 ### Handle Payment Response
 
-The SDK delivers one completion callback on the main queue after the payment view is dismissed. Closing a failed result with Retry disabled returns the failed payment response. Closing an unfinished checkout reports `.checkoutClosed`; this does not confirm that the bank or server cancelled the payment. Validation errors detected before presentation are also delivered on the main queue.
+Implement both `PayHereSDKDelegate` callbacks. The SDK delivers one completion callback on the main queue after dismissal; validation errors before presentation also arrive on the main queue.
 
-Implement `PayHereSDKDelegate` as shown below. `didReceive` provides a nonoptional response. `didFailWith` provides a `PHPaymentError` with stable `code`, `category`, and `stage` fields. SDK-generated errors provide nontechnical `message` text. Recognized server error messages are preserved exactly, including empty strings; `serverMessage`, `serverStatusCode`, and `httpStatusCode` expose available server details. This includes decoded initialization and submission rejections, and `msg` from recognized JSON error bodies on HTTP 400–599 responses. Arbitrary raw bodies, HTML, and successful-response messages are not used as error text. `localizedDescription` returns the same text as `message`.
+`didReceive` returns successful, authorized, and failed final results, including when the user closes the result screen. Closing an unfinished checkout, including confirming **Exit Now**, calls `didFailWith` with the same cancellation message (internal reason: `user_cancelled`). This does not confirm bank cancellation. Verify an unknown payment status before offering another attempt.
 
-Move application error handling from the deprecated `onErrorReceived(error: Error)` to `payHereSDK(didFailWith error: PHPaymentError)`. Implementing the typed callback gives it exclusive error delivery. `PHViewControllerDelegate`, `onResponseReceived(response:)`, and presentation using the old delegate are unavailable; use `PayHereSDKDelegate` and the nonoptional response callback below.
+`PHPaymentError.message` is the only public error field. Display it directly; do not parse it or use `localizedDescription`. Recognized server messages are preserved exactly, including empty strings; raw response bodies and HTML are excluded.
 
 ```swift
 extension ViewController: PayHereSDKDelegate {
     func payHereSDK(didFailWith error: PHPaymentError) {
-        switch error.code {
-        case .checkoutClosed:
-            // The customer closed checkout. No failure alert is needed.
-            return
-        default:
-            let alert = UIAlertController(
-                title: "Payment",
-                message: error.message,
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            present(alert, animated: true)
-        }
+        let alert = UIAlertController(
+            title: "Payment",
+            message: error.message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     func payHereSDK(didReceive response: PHResponse<Any>) {
-        if(response.isSuccess()){
-            
-            guard let resp = response.getData() as? StatusResponse else{
-                return
-            }
-            
-            print("Payment Success")
-            print("Payment Status", resp.status ?? -1)
-            print("Message", resp.message ?? "Unknown Message")
-            print("Payment No", resp.paymentNo ?? -1.0)
-            print("Payment Amount", resp.price ?? -1.0)
-            
+        guard let result = response.getData() as? StatusResponse,
+              let status = result.getStatusState() else {
+            return
         }
-        else{
-            print("Payment Error", response.getMessage() ?? "Unknown Message")
-        }
+        print("Payment status:", status)
     }
 }
 ```
 
-The protocol still requires the deprecated `onErrorReceived(error:)` during the transition. Include this separate extension only for temporary compatibility; put application error handling in the typed callback above. The SDK supplies the deprecation annotations; your app does not need to add them. The deprecated method will be removed in a future release.
+Replace the removed `onErrorReceived(error:)` with `didFailWith`. See [delegate migration](Docs/MIGRATION_3_TO_4.md#4-migrate-the-payment-delegate) for the complete 3.x migration.
 
-```swift
-extension ViewController {
-    func onErrorReceived(error: Error) {
-        print("Legacy payment error:", error)
-    }
-}
-```
-
-Existing integrations that omit the typed callback temporarily use a deprecated fallback, which preserves the original error and emits an SDK migration warning naming `onErrorReceived(error:)` and its replacement. Swift does not warn just for implementing a deprecated protocol method; declaring both error callbacks therefore produces no declaration warning. See [delegate migration](Docs/MIGRATION_3_TO_4.md#4-migrate-the-payment-delegate) for warning behavior, required changes, and error codes.
-
-User actions (`.userAction`) are distinct from invalid integration data or local SDK resource setup failures (`.integration`), network problems (`.connectivity`), and server failures (`.service`). Codes describe errors emitted by the SDK. Use `code` and `stage` together: `.requestRejected` at `.initialization` identifies initialization rejection, while the same code at `.submission` identifies submission rejection. Branch on codes, stages, and status fields, not message text. After a submission error, verify the payment status before offering another payment attempt. Final failed, authorized, and successful payment results arrive through `didReceive`.
-
-For status failures that previously delivered `onResponseReceived(response: nil)`, the SDK reports `.paymentStatusUnavailable` at stage `.statusCheck` through `didFailWith`. The deprecated error fallback sends that `PHPaymentError` to `onErrorReceived` because the former `nil` response has no original error payload. The payment status is unknown; verify it before offering another payment attempt. Polling behavior is unchanged.
+For app-side backward compatibility, pass `PHPaymentError` to an existing handler accepting `Error`; use `message` for display. The SDK no longer retains the original legacy error payload. See [compatibility guidance](Docs/MIGRATION_3_TO_4.md#app-side-backward-compatibility).
 
 ### Tests
 
