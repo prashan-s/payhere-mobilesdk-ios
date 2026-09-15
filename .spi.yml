@@ -1,0 +1,7 @@
+version: 1
+metadata:
+  authors: PayHereLK
+builder:
+  configs:
+    - platform: ios
+      documentation_targets: [PayHereSDK]
