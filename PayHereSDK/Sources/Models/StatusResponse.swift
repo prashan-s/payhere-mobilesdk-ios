@@ -26,18 +26,18 @@ public class StatusResponse : Mappable{
         
         if(map.mappingType == .toJSON){
             
-            status <- map["status"]
-            paymentNo <- map["paymentNo"]
-            message <- map["message"]
+            status      <- map["status"]
+            paymentNo   <- map["paymentNo"]
+            message     <- map["message"]
             
         }else{
             
-            status <- map["status"]
-            paymentNo <- map["paymentNo"]
-            currency <- map["currency"]
-            price <- map["price"]
-            sign <- map["sign"]
-            message <- map["message"]
+            status      <- map["status"]
+            paymentNo   <- map["paymentNo"]
+            currency    <- map["currency"]
+            price       <- map["price"]
+            sign        <- map["sign"]
+            message     <- map["message"]
             
         }
     }
