@@ -9,70 +9,56 @@
 import Foundation
 import Alamofire
 
-/// Classifies events before their legacy error payload loses the source context.
+/// Maps checkout failures to their internal reason, code, and display message.
 internal enum PHPaymentErrorMapper {
     static func invalidInitializationResponse() -> PHPaymentError {
-        return PHPaymentError(code: .invalidResponse, stage: .initialization, serverMessage: nil,
-                              serverStatusCode: nil, httpStatusCode: nil, legacyError: nil)
+        return PHPaymentError(reason: .invalidResponse, code: nil, serverMessage: nil)
     }
 
-    static func paymentCannotContinue(stage: PHPaymentError.Stage) -> PHPaymentError {
-        return PHPaymentError(code: .paymentCannotContinue, stage: stage, serverMessage: nil,
-                              serverStatusCode: nil, httpStatusCode: nil, legacyError: nil)
+    static func paymentCannotContinue() -> PHPaymentError {
+        return PHPaymentError(reason: .paymentCannotContinue, code: nil, serverMessage: nil)
     }
 
     static func paymentStatusUnavailable() -> PHPaymentError {
-        return PHPaymentError(code: .paymentStatusUnavailable, stage: .statusCheck, serverMessage: nil,
-                              serverStatusCode: nil, httpStatusCode: nil, legacyError: nil)
+        return PHPaymentError(reason: .paymentStatusUnavailable, code: nil, serverMessage: nil)
     }
 
-    static func sdk(code: PHPaymentError.Code, stage: PHPaymentError.Stage,
-                    legacyError: Error) -> PHPaymentError {
-        return PHPaymentError(code: code, stage: stage, serverMessage: nil,
-                              serverStatusCode: nil, httpStatusCode: nil, legacyError: legacyError)
+    static func sdk(reason: PHPaymentError.Reason, code: Int?) -> PHPaymentError {
+        return PHPaymentError(reason: reason, code: code, serverMessage: nil)
     }
 
-    static func serverRejected(status: Int?, message: String?,
-                               stage: PHPaymentError.Stage) -> PHPaymentError {
-        let legacyError = NSError(domain: "", code: 501,
-                                  userInfo: [NSLocalizedDescriptionKey: message ?? ""])
-        return PHPaymentError(code: .requestRejected, stage: stage, serverMessage: message,
-                              serverStatusCode: status, httpStatusCode: nil, legacyError: legacyError)
+    static func serverRejected(message: String?) -> PHPaymentError {
+        return PHPaymentError(reason: .requestRejected, code: 501, serverMessage: message)
     }
 
-    static func missingPaymentURL(status: Int?, message: String?,
-                                  stage: PHPaymentError.Stage) -> PHPaymentError {
+    static func missingPaymentURL(status: Int?, message: String?) -> PHPaymentError {
         let isRejection = status.map { $0 != 1 } ?? false
-        let legacyError = NSError(domain: "", code: 401,
-                                  userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])
-        return PHPaymentError(code: isRejection ? .requestRejected : .invalidPaymentURL,
-                              stage: stage, serverMessage: isRejection ? message : nil,
-                              serverStatusCode: status, httpStatusCode: nil, legacyError: legacyError)
+        return PHPaymentError(reason: isRejection ? .requestRejected : .invalidPaymentURL,
+                              code: 401, serverMessage: isRejection ? message : nil)
     }
 
-    static func network(_ error: AFError, stage: PHPaymentError.Stage, responseData: Data?) -> PHPaymentError {
-        let code: PHPaymentError.Code
+    static func network(_ error: AFError, responseCode: Int?, responseData: Data?) -> PHPaymentError {
+        let reason: PHPaymentError.Reason
+        // A response status can exist even when a transport failure leaves the body incomplete.
         if let status = error.responseCode {
             switch status {
-            case 400..<500: code = .requestRejected
-            case 500..<600: code = .serviceUnavailable
-            default: code = .invalidResponse
+            case 400..<500: reason = .requestRejected
+            case 500..<600: reason = .serviceUnavailable
+            default: reason = .invalidResponse
             }
         } else if let underlying = error.underlyingError as NSError?, underlying.domain == NSURLErrorDomain {
             switch underlying.code {
-            case NSURLErrorNotConnectedToInternet: code = .noInternet
-            case NSURLErrorNetworkConnectionLost: code = .connectionLost
-            case NSURLErrorTimedOut: code = .requestTimedOut
-            default: code = .networkFailure
+            case NSURLErrorNotConnectedToInternet: reason = .noInternet
+            case NSURLErrorNetworkConnectionLost: reason = .connectionLost
+            case NSURLErrorTimedOut: reason = .requestTimedOut
+            default: reason = .networkFailure
             }
         } else if error.isResponseValidationError || error.isResponseSerializationError {
-            code = .invalidResponse
+            reason = .invalidResponse
         } else {
             // A cancelled internal request is never evidence that the user closed checkout.
-            code = .networkFailure
+            reason = .networkFailure
         }
-        let legacyError = NSError(domain: "", code: error.responseCode ?? 0,
-                                  userInfo: [NSLocalizedDescriptionKey: error.errorDescription ?? ""])
         // Only recognized PayHere error fields from an HTTP rejection are displayable server text.
         // A proxy's HTML or a partial response from a transport failure is not an error message.
         let serverError: ServerError?
@@ -81,9 +67,7 @@ internal enum PHPaymentErrorMapper {
         } else {
             serverError = nil
         }
-        return PHPaymentError(code: code, stage: stage, serverMessage: serverError?.msg,
-                              serverStatusCode: serverError?.status, httpStatusCode: error.responseCode,
-                              legacyError: legacyError)
+        return PHPaymentError(reason: reason, code: responseCode, serverMessage: serverError?.msg)
     }
 
     private struct ServerError: Decodable {

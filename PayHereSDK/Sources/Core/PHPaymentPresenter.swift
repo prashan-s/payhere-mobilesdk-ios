@@ -20,18 +20,14 @@ internal enum PHPaymentPresenter {
             guard let merchantID = request.merchantID,
                   !merchantID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 delegate.payHereSDK(didFailWith: PHPaymentErrorMapper.sdk(
-                    code: .invalidMerchantID, stage: .presentation, legacyError: NSError(
-                    domain: "", code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: "Invalid merchant ID"])))
+                    reason: .invalidMerchantID, code: 401))
                 return
             }
 
             let storyBoard = UIStoryboard(name: "PayHere", bundle: Bundle.payHereBundle)
             guard let initialController = storyBoard.instantiateViewController(withIdentifier: "PHBottomViewController") as? PHBottomViewController else {
                 delegate.payHereSDK(didFailWith: PHPaymentErrorMapper.sdk(
-                    code: .paymentViewUnavailable, stage: .presentation, legacyError: NSError(
-                    domain: "", code: 401,
-                    userInfo: [NSLocalizedDescriptionKey: "Unable to load the payment view"])))
+                    reason: .paymentViewUnavailable, code: 401))
                 return
             }
 

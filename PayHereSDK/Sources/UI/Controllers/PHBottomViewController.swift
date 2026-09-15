@@ -569,23 +569,21 @@ public class PHBottomViewController: UIViewController {
         }
     }
 
-    private func finishWithNetworkError(_ error: AFError, stage: PHPaymentError.Stage,
+    private func finishWithNetworkError(_ error: AFError, responseCode: Int?,
                                         responseData: Data?, animate: Bool = true) {
-        finishWithError(PHPaymentErrorMapper.network(error, stage: stage, responseData: responseData), animate: animate)
+        finishWithError(PHPaymentErrorMapper.network(error, responseCode: responseCode,
+                                                     responseData: responseData), animate: animate)
     }
 
-    private var paymentErrorStage: PHPaymentError.Stage {
-        switch step {
-        case .Dashboard: return .initialization
-        case .Payment: return .paymentPage
-        case .Complete: return .result
+    internal func finishUserClosure() {
+        switch lifecycle.phase {
+        case .active:
+            finishWithError(PHPaymentErrorMapper.sdk(reason: .userCancelled, code: 401))
+        case .result:
+            finishWithResult()
+        case .idle, .closing, .closed:
+            return
         }
-    }
-
-    private func checkoutClosedError() -> PHPaymentError {
-        return PHPaymentErrorMapper.sdk(code: .checkoutClosed, stage: paymentErrorStage,
-            legacyError: NSError(domain: "", code: 401,
-                                 userInfo: [NSLocalizedDescriptionKey: "Oparation cancelled!"]))
     }
 
     private func createInitRequest(phInitialRequest : PHInitialRequest) ->PHInitRequest{
@@ -745,10 +743,7 @@ public class PHBottomViewController: UIViewController {
         self.tableView.isHidden  = true
         
         if let validation = self.Validate() {
-            let error = NSError(domain: "", code: 401,
-                                userInfo: [NSLocalizedDescriptionKey: validation.description])
-            finishWithError(PHPaymentErrorMapper.sdk(code: validation.code, stage: .initialization,
-                                                     legacyError: error), animate: false)
+            finishWithError(PHPaymentErrorMapper.sdk(reason: validation, code: 401), animate: false)
         } else {
             checkNetworkAvailability()
         }
@@ -766,9 +761,7 @@ public class PHBottomViewController: UIViewController {
                 case .reachable:
                     self.beginInitialization()
                 case .notReachable, .unknown:
-                    self.finishWithError(PHPaymentErrorMapper.sdk(code: .noInternet, stage: .initialization,
-                        legacyError: NSError(domain: "", code: 401,
-                        userInfo: [NSLocalizedDescriptionKey: "Unable to connect to the internet"])), animate: false)
+                    self.finishWithError(PHPaymentErrorMapper.sdk(reason: .noInternet, code: 401), animate: false)
                 }
             }
         }
@@ -810,8 +803,11 @@ public class PHBottomViewController: UIViewController {
     }
     
     @objc private func forceClose(){
-        guard lifecycle.phase == .active || lifecycle.phase == .result,
-              cancellationAlert == nil else { return }
+        if lifecycle.phase == .result {
+            finishUserClosure()
+            return
+        }
+        guard lifecycle.phase == .active, cancellationAlert == nil else { return }
         let attemptID = lifecycle.attemptID
         let phase = lifecycle.phase
         let alert = UIAlertController(
@@ -822,14 +818,15 @@ public class PHBottomViewController: UIViewController {
         
         cancellationAlert = alert
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { [weak self] _ in
-            self?.cancellationAlert = nil
+            guard let self = self, self.lifecycle.attemptID == attemptID,
+                  self.lifecycle.phase == phase else { return }
+            self.cancellationAlert = nil
         }))
         
         alert.addAction(UIAlertAction(title: "Exit Now", style: .destructive) { [weak self] _ in
             guard let self = self, self.lifecycle.attemptID == attemptID,
                   self.lifecycle.phase == phase else { return }
-            // Force exit logic here
-            self.finishWithError(self.checkoutClosedError())
+            self.finishUserClosure()
         })
         
         self.present(alert, animated: true)
@@ -964,7 +961,7 @@ public class PHBottomViewController: UIViewController {
             
             if(velocity.y > 1000.0 || translation.y > threshold){
                 
-                self.finishWithError(self.checkoutClosedError())
+                self.finishUserClosure()
                 
             }else{
                 
@@ -995,7 +992,7 @@ public class PHBottomViewController: UIViewController {
                         let result = try newJSONDecoder().decode(PHInitResponse.self, from: data)
                         guard result.status == 1 else {
                             self.finishWithError(PHPaymentErrorMapper.serverRejected(
-                                status: result.status, message: result.msg, stage: .initialization), animate: false)
+                                message: result.msg), animate: false)
                             return
                         }
                         guard let key = result.data?.order?.orderKey,
@@ -1007,11 +1004,11 @@ public class PHBottomViewController: UIViewController {
                         self.initResponse = result
                         self.initalizedUI(methods)
                     } catch {
-                        self.finishWithError(PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .initialization,
-                                                                     legacyError: error), animate: false)
+                        self.finishWithError(PHPaymentErrorMapper.sdk(reason: .invalidResponse, code: nil), animate: false)
                     }
                 case .failure(let error):
-                    self.finishWithNetworkError(error, stage: .initialization, responseData: response.data, animate: false)
+                    self.finishWithNetworkError(error, responseCode: response.response?.statusCode,
+                                                responseData: response.data, animate: false)
                 }
             }
         }
@@ -1038,7 +1035,7 @@ public class PHBottomViewController: UIViewController {
                         let result = try newJSONDecoder().decode(PayHereInitnSubmitResponse.self, from: data)
                         guard result.status == 1 else {
                             self.finishWithError(PHPaymentErrorMapper.serverRejected(
-                                status: result.status, message: result.msg, stage: .initialization), animate: false)
+                                message: result.msg), animate: false)
                             return
                         }
                         guard let key = result.data?.order?.orderKey,
@@ -1050,11 +1047,11 @@ public class PHBottomViewController: UIViewController {
                         self.step = .Payment
                         self.initWebView(result)
                     } catch {
-                        self.finishWithError(PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .initialization,
-                                                                     legacyError: error), animate: false)
+                        self.finishWithError(PHPaymentErrorMapper.sdk(reason: .invalidResponse, code: nil), animate: false)
                     }
                 case .failure(let error):
-                    self.finishWithNetworkError(error, stage: .initialization, responseData: response.data, animate: false)
+                    self.finishWithNetworkError(error, responseCode: response.response?.statusCode,
+                                                responseData: response.data, animate: false)
                 }
             }
         }
@@ -1083,11 +1080,11 @@ public class PHBottomViewController: UIViewController {
                         let result = try newJSONDecoder().decode(PayHereSubmitResponse.self, from: data)
                         self.initWebView(result)
                     } catch {
-                        self.finishWithError(PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .submission,
-                                                                     legacyError: error))
+                        self.finishWithError(PHPaymentErrorMapper.sdk(reason: .invalidResponse, code: nil))
                     }
                 case .failure(let error):
-                    self.finishWithNetworkError(error, stage: .submission, responseData: response.data)
+                    self.finishWithNetworkError(error, responseCode: response.response?.statusCode,
+                                                responseData: response.data)
                 }
             }
         }
@@ -1148,7 +1145,7 @@ public class PHBottomViewController: UIViewController {
             
         }else{
             self.finishWithError(PHPaymentErrorMapper.missingPaymentURL(
-                status: submitResponse.status, message: submitResponse.msg, stage: .submission))
+                status: submitResponse.status, message: submitResponse.msg))
         }
         
     }
@@ -1171,7 +1168,7 @@ public class PHBottomViewController: UIViewController {
         if let url = URL(string: url) {
             let request = URLRequest(url: url)
             guard let navigation = webView.load(request) else {
-                finishWithError(PHPaymentErrorMapper.paymentCannotContinue(stage: .paymentPage))
+                finishWithError(PHPaymentErrorMapper.paymentCannotContinue())
                 return
             }
             activeNavigation = navigation
@@ -1179,8 +1176,7 @@ public class PHBottomViewController: UIViewController {
             progressBar.isHidden = false
             webView.isHidden = true
         } else {
-            finishWithError(PHPaymentErrorMapper.sdk(code: .invalidPaymentURL, stage: .paymentPage,
-                legacyError: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            finishWithError(PHPaymentErrorMapper.sdk(reason: .invalidPaymentURL, code: 401))
         }
     }
 
@@ -1191,7 +1187,7 @@ public class PHBottomViewController: UIViewController {
             self.loadPayHereInitAndSubmitUI(url: url)
         }else{
             self.finishWithError(PHPaymentErrorMapper.missingPaymentURL(
-                status: submitResponse.status, message: submitResponse.msg, stage: .initialization))
+                status: submitResponse.status, message: submitResponse.msg))
         }
         
     }
@@ -1467,19 +1463,19 @@ public class PHBottomViewController: UIViewController {
         
     }
     
-    private func Validate() -> (code: PHPaymentError.Code, description: String)? {
+    private func Validate() -> PHPaymentError.Reason? {
         
         if(apiMethod == .CheckOut || apiMethod == .Recurrence){
             guard let amount = initRequest?.amount, amount > 0 else {
-                return (.invalidAmount, "Invalid amount")
+                return .invalidAmount
             }
         }
         
         if (initRequest?.currency == nil || initRequest?.currency?.count != 3) {
-            return (.invalidCurrency, "Invalid currency")
+            return .invalidCurrency
         }
         if (initRequest?.merchantID == nil || initRequest?.merchantID?.count == 0) {
-            return (.invalidMerchantID, "Invalid merchant ID")
+            return .invalidMerchantID
         }
         
         if(initRequest?.notifyURL == nil || initRequest?.notifyURL?.count == 0){
@@ -1567,8 +1563,7 @@ public class PHBottomViewController: UIViewController {
 
     
     @IBAction private func btnCancelTapped(){
-        self.timer?.invalidate()
-        self.finishWithError(self.checkoutClosedError())
+        self.finishUserClosure()
     }
     
     @IBAction private func btnTryAgainTapped(){
@@ -1673,14 +1668,14 @@ extension PHBottomViewController : WKUIDelegate,WKNavigationDelegate{
 
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard webView === self.webView, ownsNavigation(activeNavigation) else { return }
-        finishWithError(PHPaymentErrorMapper.paymentCannotContinue(stage: .paymentPage))
+        finishWithError(PHPaymentErrorMapper.paymentCannotContinue())
     }
 
     private func handleWebNavigationFailure(_ webView: WKWebView, navigation: WKNavigation?, error: Error) {
         guard webView === self.webView, ownsNavigation(navigation) else { return }
         let error = error as NSError
         guard error.domain != NSURLErrorDomain || error.code != NSURLErrorCancelled else { return }
-        finishWithError(PHPaymentErrorMapper.paymentCannotContinue(stage: .paymentPage))
+        finishWithError(PHPaymentErrorMapper.paymentCannotContinue())
     }
 
     private func updateCardFormBottomInset() {
@@ -1872,7 +1867,7 @@ extension PHBottomViewController: UISheetPresentationControllerDelegate {
 
     public func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
         guard usesNativeSheet, lifecycle.phase == .active || lifecycle.phase == .result else { return }
-        btnCancelTapped()
+        finishUserClosure()
     }
 }
 
@@ -1932,7 +1927,7 @@ extension PHBottomViewController : UITableViewDelegate,UITableViewDataSource{
             guard let url = method.submission?.mobileUrls?.IOS,
                   let urlValue = URL(string: url), let scheme = urlValue.scheme,
                   !["http", "https"].contains(scheme.lowercased()) || urlValue.host?.isEmpty == false else {
-                finishWithError(PHPaymentErrorMapper.paymentCannotContinue(stage: .submission))
+                finishWithError(PHPaymentErrorMapper.paymentCannotContinue())
                 return
             }
             let attemptID = lifecycle.attemptID
@@ -1946,7 +1941,7 @@ extension PHBottomViewController : UITableViewDelegate,UITableViewDataSource{
                           self.helaPayHandoffID == handoffID else { return }
                     self.helaPayHandoffID = nil
                     guard opened else {
-                        self.finishWithError(PHPaymentErrorMapper.paymentCannotContinue(stage: .submission))
+                        self.finishWithError(PHPaymentErrorMapper.paymentCannotContinue())
                         return
                     }
                     self.startOrderStatusCheckTimer()

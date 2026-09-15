@@ -4,184 +4,183 @@ import Alamofire
 @testable import PayHereSDK
 
 final class PHPaymentErrorTests: XCTestCase {
-    func testCannotContinueUsesGenericMessageWithoutServerOrLegacyMetadata() {
-        for stage: PHPaymentError.Stage in [.submission, .paymentPage] {
-            let error = PHPaymentErrorMapper.paymentCannotContinue(stage: stage)
+    func testCannotContinueUsesGenericMessageWithoutServerMetadata() {
+        let error = PHPaymentErrorMapper.paymentCannotContinue()
 
-            XCTAssertEqual(error.code.rawValue, "payment_cannot_continue")
-            XCTAssertEqual(error.category, .service)
-            XCTAssertEqual(error.stage, stage)
-            XCTAssertEqual(error.message, "We couldn’t continue this payment. Please contact the merchant to check your payment status.")
-            XCTAssertEqual(error.localizedDescription, error.message)
-            XCTAssertNil(error.serverMessage)
-            XCTAssertNil(error.serverStatusCode)
-            XCTAssertNil(error.httpStatusCode)
-            XCTAssertNil(error.legacyError)
-        }
+        XCTAssertEqual(error.reason.rawValue, "payment_cannot_continue")
+        XCTAssertEqual(error.message, "We couldn’t continue this payment. Please contact the merchant to check your payment status.")
+        XCTAssertNil(error.serverMessage)
+        XCTAssertNil(error.code)
     }
 
-    func testInvalidInitializationUsesInvalidResponseWithoutServerOrLegacyMetadata() {
+    func testDisplayMessageDoesNotRequireLocalizedErrorConformance() {
+        let error = PHPaymentErrorMapper.paymentStatusUnavailable()
+        let bridged: Error = error
+
+        XCTAssertEqual(error.message, "We couldn’t confirm your payment status. Please contact the merchant before trying again.")
+        XCTAssertFalse(bridged is LocalizedError)
+    }
+
+    func testInvalidInitializationUsesInvalidResponseWithoutServerMetadata() {
         let error = PHPaymentErrorMapper.invalidInitializationResponse()
 
-        XCTAssertEqual(error.code, .invalidResponse)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .initialization)
+        XCTAssertEqual(error.reason, .invalidResponse)
         XCTAssertEqual(error.message, "We couldn’t confirm the payment details. Please contact the merchant to check your payment status.")
-        XCTAssertEqual(error.localizedDescription, error.message)
         XCTAssertNil(error.serverMessage)
-        XCTAssertNil(error.serverStatusCode)
-        XCTAssertNil(error.httpStatusCode)
-        XCTAssertNil(error.legacyError)
+        XCTAssertNil(error.code)
     }
 
-    func testUserClosureAndIntegrationFailuresRemainDistinctWithIdenticalLegacyCodes() {
-        let legacy = NSError(domain: "", code: 401, userInfo: [:])
-        let closed = PHPaymentErrorMapper.sdk(code: .checkoutClosed, stage: .paymentPage, legacyError: legacy)
-        let invalid = PHPaymentErrorMapper.sdk(code: .invalidAmount, stage: .initialization, legacyError: legacy)
+    func testUserCancellationAndIntegrationFailuresRemainDistinctWithIdenticalCodes() {
+        let cancelled = PHPaymentErrorMapper.sdk(reason: .userCancelled, code: 401)
+        let invalid = PHPaymentErrorMapper.sdk(reason: .invalidAmount, code: 401)
 
-        XCTAssertEqual(closed.code.rawValue, "checkout_closed")
-        XCTAssertEqual(closed.category, .userAction)
-        XCTAssertEqual(invalid.code.rawValue, "invalid_amount")
-        XCTAssertEqual(invalid.category, .integration)
-        XCTAssertNotEqual(closed.message, invalid.message)
+        XCTAssertEqual(cancelled.reason.rawValue, "user_cancelled")
+        XCTAssertEqual(invalid.reason.rawValue, "invalid_amount")
+        XCTAssertEqual(cancelled.code, 401)
+        XCTAssertEqual(invalid.code, 401)
+        XCTAssertEqual(cancelled.message, "You cancelled checkout. Please check your payment status before trying again.")
+        XCTAssertNotEqual(cancelled.message, invalid.message)
+        XCTAssertNil(cancelled.serverMessage)
     }
 
-    func testServerMessagesArePreservedWithoutTrimmingOrReplacement() throws {
+    func testServerMessagesArePreservedWithoutTrimmingOrReplacement() {
         for message in ["", " \t\n", "  Please use another card.\n", "ගෙවීම නැවත පරීක්ෂා කරන්න. 💳", "e\u{301}"] {
-            let error = PHPaymentErrorMapper.serverRejected(status: -17, message: message, stage: .initialization)
+            let error = PHPaymentErrorMapper.serverRejected(message: message)
 
             XCTAssertEqual(Array(error.message.utf8), Array(message.utf8))
             XCTAssertEqual(error.serverMessage.map { Array($0.utf8) }, Array(message.utf8))
-            XCTAssertEqual(error.errorDescription.map { Array($0.utf8) }, Array(message.utf8))
-            XCTAssertEqual(Array(error.localizedDescription.utf8), Array(message.utf8))
-            XCTAssertEqual(error.serverStatusCode, -17)
-            XCTAssertEqual(error.code, .requestRejected)
-            XCTAssertEqual(error.stage, .initialization)
-            XCTAssertNil(error.httpStatusCode)
-            XCTAssertEqual(error.category, .service)
-            let legacy = try XCTUnwrap(error.legacyError) as NSError
-            XCTAssertEqual(legacy.domain, "")
-            XCTAssertEqual(legacy.code, 501)
-            XCTAssertEqual(Array(legacy.localizedDescription.utf8), Array(message.utf8))
+            XCTAssertEqual(error.code, 501)
+            XCTAssertEqual(error.reason, .requestRejected)
         }
     }
 
-    func testMissingServerMessageUsesUXTextWithoutChangingLegacyEmptyDescription() {
-        let error = PHPaymentErrorMapper.serverRejected(status: nil, message: nil, stage: .initialization)
+    func testMissingServerMessageUsesSDKMessage() {
+        let error = PHPaymentErrorMapper.serverRejected(message: nil)
 
         XCTAssertNil(error.serverMessage)
-        XCTAssertNil(error.serverStatusCode)
+        XCTAssertEqual(error.code, 501)
         XCTAssertFalse(error.message.isEmpty)
-        XCTAssertEqual(error.message, error.localizedDescription)
-        XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, "")
-    }
-
-    func testDecodingDiagnosticTextDoesNotLeakIntoDisplayMessage() throws {
-        do {
-            _ = try JSONDecoder().decode(PHInitResponse.self, from: Data("{\"status\":\"not-an-integer\"}".utf8))
-            XCTFail("An invalid response must fail decoding")
-        } catch let original as DecodingError {
-            let error = PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .initialization,
-                                                legacyError: original)
-
-            XCTAssertEqual(error.category, .service)
-            XCTAssertEqual(error.message, "We couldn’t confirm the payment details. Please contact the merchant to check your payment status.")
-            XCTAssertNil(error.serverMessage)
-            guard case .typeMismatch(let originalType, let originalContext) = original,
-                  case .typeMismatch(let deliveredType, let deliveredContext) = try XCTUnwrap(error.legacyError as? DecodingError) else {
-                return XCTFail("The original decoding failure must be retained")
-            }
-            XCTAssertTrue(originalType == deliveredType)
-            XCTAssertEqual(originalContext.debugDescription, deliveredContext.debugDescription)
-            XCTAssertEqual(originalContext.codingPath.map(\.stringValue), ["status"])
-            XCTAssertEqual(originalContext.codingPath.map(\.stringValue), deliveredContext.codingPath.map(\.stringValue))
-            XCTAssertFalse(error.message.contains(originalContext.debugDescription))
-        }
     }
 
     func testTransportReasonsUseStructuredUnderlyingError() {
-        let cases: [(URLError.Code, PHPaymentError.Code)] = [
+        let cases: [(URLError.Code, PHPaymentError.Reason)] = [
             (.notConnectedToInternet, .noInternet),
             (.networkConnectionLost, .connectionLost),
             (.timedOut, .requestTimedOut),
             (.cannotConnectToHost, .networkFailure)
         ]
-        for (urlCode, expectedCode) in cases {
+        for (urlCode, expectedReason) in cases {
             let underlying = URLError(urlCode, userInfo: [NSLocalizedDescriptionKey: "Oparation cancelled!"])
             let transport = AFError.sessionTaskFailed(error: underlying)
-            let error = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: nil)
+            let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: nil)
 
-            XCTAssertEqual(error.code, expectedCode)
-            XCTAssertEqual(error.category, .connectivity)
-            XCTAssertEqual(error.stage, .submission)
+            XCTAssertEqual(error.reason, expectedReason)
+            XCTAssertNil(error.code)
             XCTAssertNil(error.serverMessage)
-            XCTAssertNil(error.httpStatusCode)
-            XCTAssertEqual((error.legacyError as NSError?)?.code, 0)
-            XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, transport.errorDescription)
         }
     }
 
     func testCancelledURLSessionRequestUsesGeneralNetworkFailure() {
         let transport = AFError.sessionTaskFailed(error: URLError(.cancelled))
-        let error = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: nil)
+        let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: nil)
 
-        XCTAssertEqual(error.code, .networkFailure)
-        XCTAssertEqual(error.category, .connectivity)
-        XCTAssertNotEqual(error.category, .userAction)
+        XCTAssertEqual(error.reason, .networkFailure)
     }
 
-    func testHTTPStatusesRemainSeparateFromSDKCodesAndLegacyPayloadIsPreserved() throws {
-        let cases: [(Int, PHPaymentError.Code)] = [(401, .requestRejected), (503, .serviceUnavailable), (302, .invalidResponse)]
-        for (status, expectedCode) in cases {
+    func testHTTPStatusesRemainSeparateFromReasons() {
+        let cases: [(Int, PHPaymentError.Reason)] = [(401, .requestRejected), (503, .serviceUnavailable), (302, .invalidResponse)]
+        for (status, expectedReason) in cases {
             let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: status))
-            let error = PHPaymentErrorMapper.network(transport, stage: .initialization, responseData: nil)
+            let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: nil)
 
-            XCTAssertEqual(error.code, expectedCode)
-            XCTAssertEqual(error.category, .service)
-            XCTAssertEqual(error.httpStatusCode, status)
-            XCTAssertNil(error.serverStatusCode)
+            XCTAssertEqual(error.reason, expectedReason)
+            XCTAssertEqual(error.code, status)
             XCTAssertNil(error.serverMessage)
-            let legacy = try XCTUnwrap(error.legacyError) as NSError
-            XCTAssertEqual(legacy.domain, "")
-            XCTAssertEqual(legacy.code, status)
-            XCTAssertEqual(legacy.localizedDescription, transport.errorDescription)
         }
     }
 
-    func testRejectedSubmissionMessageDoesNotClaimThePaymentNeverStarted() {
+    func testRejectedRequestMessageDoesNotClaimThePaymentNeverStarted() {
         let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: 403))
-        let initialization = PHPaymentErrorMapper.network(transport, stage: .initialization, responseData: nil)
-        let submission = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: nil)
+        let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: nil)
 
-        XCTAssertEqual(initialization.code, .requestRejected)
-        XCTAssertEqual(submission.code, .requestRejected)
-        XCTAssertEqual(initialization.message, "We couldn’t start this payment. Please contact the merchant.")
-        XCTAssertEqual(submission.message, "We couldn’t complete this payment request. Please contact the merchant to check your payment status.")
+        XCTAssertEqual(error.reason, .requestRejected)
+        XCTAssertEqual(error.message, "We couldn’t complete this payment request. Please contact the merchant to check your payment status.")
     }
 
-    func testHTTPRejectionPreservesRecognizedServerMessagesAndLegacyHTTPDescription() throws {
+    func testHTTPRejectionPreservesRecognizedServerMessages() throws {
         for status in [422, 503] {
             let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: status))
             for message in ["", " \t\n", "Please contact the merchant. 💳"] {
                 let data = try JSONSerialization.data(withJSONObject: ["status": -19, "msg": message])
-                let error = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: data)
+                let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: data)
 
                 XCTAssertEqual(error.serverMessage.map { Array($0.utf8) }, Array(message.utf8))
                 XCTAssertEqual(Array(error.message.utf8), Array(message.utf8))
-                XCTAssertEqual(error.serverStatusCode, -19)
-                XCTAssertEqual(error.httpStatusCode, status)
-                XCTAssertEqual((error.legacyError as NSError?)?.code, status)
-                XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, transport.errorDescription)
+                XCTAssertEqual(error.code, status)
             }
         }
+    }
+
+    func testHTTPCodeIsPreservedRegardlessOfJSONStatus() throws {
+        let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: 503))
+        for status in [-19, 0, 1, 401, 501] {
+            let data = try JSONSerialization.data(withJSONObject: ["status": status])
+            let error = PHPaymentErrorMapper.network(transport, responseCode: 503, responseData: data)
+
+            XCTAssertEqual(error.code, 503)
+        }
+    }
+
+    func testHTTPCodeDoesNotDependOnResponseBody() {
+        let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: 503))
+        let payloads: [String?] = [nil, "{}", "{\"status\":null}", "{\"msg\":\"Unavailable\"}", "<html>Unavailable</html>"]
+        for payload in payloads {
+            let error = PHPaymentErrorMapper.network(transport, responseCode: 503,
+                                                    responseData: payload.map { Data($0.utf8) })
+
+            XCTAssertEqual(error.code, 503)
+        }
+    }
+
+    func testSerializationFailurePreservesSuppliedHTTPCodeWhenAFErrorHasNone() {
+        let transport = AFError.responseSerializationFailed(reason: .inputDataNilOrZeroLength)
+        XCTAssertNil(transport.responseCode)
+
+        let error = PHPaymentErrorMapper.network(transport, responseCode: 200, responseData: Data())
+
+        XCTAssertEqual(error.reason, .invalidResponse)
+        XCTAssertEqual(error.code, 200)
+        XCTAssertNil(error.serverMessage)
+    }
+
+    func testTransportFailureAfterHTTPHeadersPreservesResponseCodeAndConnectionReason() {
+        let transport = AFError.sessionTaskFailed(error: URLError(.networkConnectionLost))
+        let partialData = Data("{\"status\":-19,\"msg\":\"Incomplete server response\"}".utf8)
+
+        for status in [200, 422, 503] {
+            let error = PHPaymentErrorMapper.network(transport, responseCode: status, responseData: partialData)
+
+            XCTAssertEqual(error.reason, .connectionLost)
+            XCTAssertEqual(error.code, status)
+            XCTAssertNil(error.serverMessage)
+            XCTAssertFalse(error.message.contains("Incomplete server response"))
+        }
+    }
+
+    func testGenericErrorsHaveNoCode() {
+        let error = PHPaymentErrorMapper.sdk(reason: .invalidResponse, code: nil)
+        let unavailable = PHPaymentErrorMapper.paymentStatusUnavailable()
+
+        XCTAssertNil(error.code)
+        XCTAssertNil(unavailable.code)
     }
 
     func testHTTPRejectionWithoutUsableServerMessageUsesSDKMessage() {
         let transport = AFError.responseValidationFailed(reason: .unacceptableStatusCode(code: 503))
         for payload in ["{\"status\":-19,\"msg\":null}", "{\"status\":-19}", "<html>Proxy unavailable</html>", "{\"msg\":123}"] {
-            let error = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: Data(payload.utf8))
+            let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: Data(payload.utf8))
 
-            XCTAssertEqual(error.code, .serviceUnavailable)
+            XCTAssertEqual(error.reason, .serviceUnavailable)
             XCTAssertNil(error.serverMessage)
             XCTAssertEqual(error.message, "The payment service is temporarily unavailable. Please check your payment status before trying again.")
         }
@@ -194,150 +193,50 @@ final class PHPaymentErrorTests: XCTestCase {
             .responseValidationFailed(reason: .unacceptableStatusCode(code: 302))
         ]
         for transport in errors {
-            let error = PHPaymentErrorMapper.network(transport, stage: .submission, responseData: data)
+            let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: data)
 
             XCTAssertNil(error.serverMessage)
-            XCTAssertNil(error.serverStatusCode)
             XCTAssertFalse(error.message.contains("partial body"))
         }
     }
 
-    func testSubmissionRejectionWithoutPaymentURLPreservesServerMessageAndLegacyURLError() {
+    func testSubmissionRejectionWithoutPaymentURLPreservesServerMessageAndCode() {
         let message = "  This card cannot be used.\n"
-        let error = PHPaymentErrorMapper.missingPaymentURL(status: -2, message: message, stage: .submission)
+        let error = PHPaymentErrorMapper.missingPaymentURL(status: -2, message: message)
 
-        XCTAssertEqual(error.code, .requestRejected)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .submission)
-        XCTAssertEqual(error.serverStatusCode, -2)
+        XCTAssertEqual(error.reason, .requestRejected)
+        XCTAssertEqual(error.code, 401)
         XCTAssertEqual(Array(error.message.utf8), Array(message.utf8))
         XCTAssertEqual(error.serverMessage, message)
-        XCTAssertEqual((error.legacyError as NSError?)?.domain, "")
-        XCTAssertEqual((error.legacyError as NSError?)?.code, 401)
-        XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, "Invalid URL")
     }
 
     func testMissingPaymentURLDoesNotDisplaySuccessOrUnknownStatusTextAsAnError() {
         for status: Int? in [1, nil] {
-            let error = PHPaymentErrorMapper.missingPaymentURL(status: status, message: "Success", stage: .submission)
+            let error = PHPaymentErrorMapper.missingPaymentURL(status: status, message: "Success")
 
-            XCTAssertEqual(error.code, .invalidPaymentURL)
+            XCTAssertEqual(error.reason, .invalidPaymentURL)
+            XCTAssertEqual(error.code, 401)
             XCTAssertNil(error.serverMessage)
             XCTAssertEqual(error.message, "The payment page couldn’t be opened.")
-            XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, "Invalid URL")
         }
     }
 
     @MainActor
-    func testDeprecatedFallbackDeliversOriginalNSErrorInstanceExactlyOnce() async throws {
-        let original = NSError(domain: "provider", code: 912,
-                               userInfo: [NSLocalizedDescriptionKey: "original", "providerPayload": "unchanged"])
-        let error = PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .initialization, legacyError: original)
-        let recorder = LegacyErrorRecorder()
-        let delegate: PayHereSDKDelegate = recorder
-
-        delegate.payHereSDK(didFailWith: error)
-
-        XCTAssertEqual(recorder.errors.count, 1)
-        let delivered = try XCTUnwrap(recorder.errors.first) as NSError
-        XCTAssertTrue(delivered === original)
-        XCTAssertEqual(delivered.userInfo["providerPayload"] as? String, "unchanged")
-    }
-
-    @MainActor
-    func testDeprecatedFallbackPreservesDecodingErrorTypeAndContext() async throws {
-        let original = DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Original parser context"))
-        let error = PHPaymentErrorMapper.sdk(code: .invalidResponse, stage: .submission, legacyError: original)
-        let recorder = LegacyErrorRecorder()
-        let delegate: PayHereSDKDelegate = recorder
-
-        delegate.payHereSDK(didFailWith: error)
-
-        let delivered = try XCTUnwrap(recorder.errors.first)
-        guard case DecodingError.dataCorrupted(let context) = delivered else {
-            return XCTFail("Legacy delegates must receive the original decoding error")
-        }
-        XCTAssertEqual(context.debugDescription, "Original parser context")
-        XCTAssertTrue(context.codingPath.isEmpty)
-    }
-
-    @MainActor
-    func testStatusUnavailableUsesTypedErrorForDeprecatedFallback() async throws {
-        let error = PHPaymentErrorMapper.paymentStatusUnavailable()
-        let recorder = LegacyErrorRecorder()
-        let delegate: PayHereSDKDelegate = recorder
-
-        delegate.payHereSDK(didFailWith: error)
-
-        XCTAssertEqual(error.code, .paymentStatusUnavailable)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .statusCheck)
-        XCTAssertNil(error.legacyError)
-        XCTAssertNil(error.serverMessage)
-        XCTAssertFalse(error.message.isEmpty)
-        XCTAssertTrue(recorder.responses.isEmpty)
-        XCTAssertEqual(recorder.errors.count, 1)
-        let delivered = try XCTUnwrap(recorder.errors.first as? PHPaymentError)
-        XCTAssertEqual(delivered.code, .paymentStatusUnavailable)
-        XCTAssertEqual(delivered.stage, .statusCheck)
-        XCTAssertNil(delivered.legacyError)
-    }
-
-    @MainActor
-    func testCannotContinueAndInvalidInitializationUseTypedErrorsForDeprecatedFallback() async throws {
-        let errors = [PHPaymentErrorMapper.paymentCannotContinue(stage: .paymentPage),
-                      PHPaymentErrorMapper.invalidInitializationResponse()]
-        for error in errors {
-            let recorder = LegacyErrorRecorder()
-            let delegate: PayHereSDKDelegate = recorder
-
-            delegate.payHereSDK(didFailWith: error)
-
-            XCTAssertEqual(recorder.errors.count, 1)
-            XCTAssertTrue(recorder.responses.isEmpty)
-            let delivered = try XCTUnwrap(recorder.errors.first as? PHPaymentError)
-            XCTAssertEqual(delivered.code, error.code)
-            XCTAssertEqual(delivered.stage, error.stage)
-            XCTAssertEqual(delivered.message, error.message)
-            XCTAssertNil(delivered.legacyError)
-        }
-    }
-
-    @MainActor
-    func testControllerDoesNotRetainTypedOrLegacyErrorDelegate() async {
+    func testControllerDoesNotRetainErrorDelegate() async {
         let typedController = PHBottomViewController()
-        let legacyController = PHBottomViewController()
         weak var typedDelegate: TypedErrorRecorder?
-        weak var legacyDelegate: LegacyErrorRecorder?
         do {
             let typed = TypedErrorRecorder()
-            let legacy = LegacyErrorRecorder()
             typedDelegate = typed
-            legacyDelegate = legacy
             typedController.delegate = typed
-            legacyController.delegate = legacy
         }
 
         XCTAssertNil(typedDelegate)
-        XCTAssertNil(legacyDelegate)
         XCTAssertNil(typedController.delegate)
-        XCTAssertNil(legacyController.delegate)
     }
 
     @MainActor
-    func testTypedPresentationDoesNotAlsoInvokeDeprecatedErrorHandler() async {
-        let presenter = ErrorTestPresenter()
-        let delegate = BothErrorHandlersRecorder()
-
-        PayHereSDK.present(from: presenter, withInitRequest: Self.makeRequest(merchantID: nil), delegate: delegate)
-
-        XCTAssertEqual(delegate.modernErrorCount, 1)
-        XCTAssertEqual(delegate.modernResponseCount, 0)
-        XCTAssertEqual(delegate.legacyErrorCount, 0)
-    }
-
-    @MainActor
-    func testInvalidMerchantPresentationDeliversTypedIntegrationErrorWithoutPresenting() async {
+    func testInvalidMerchantPresentationDeliversTypedErrorWithoutPresenting() async {
         for merchantID: String? in [nil, "", " \t\n"] {
             let presenter = ErrorTestPresenter()
             let recorder = TypedErrorRecorder()
@@ -346,40 +245,24 @@ final class PHPaymentErrorTests: XCTestCase {
 
             XCTAssertEqual(presenter.presentationCount, 0)
             XCTAssertEqual(recorder.errors.count, 1)
-            XCTAssertEqual(recorder.errors.first?.code, .invalidMerchantID)
-            XCTAssertEqual(recorder.errors.first?.category, .integration)
-            XCTAssertEqual(recorder.errors.first?.stage, .presentation)
+            XCTAssertEqual(recorder.errors.first?.reason, .invalidMerchantID)
+            XCTAssertEqual(recorder.errors.first?.code, 401)
             XCTAssertTrue(recorder.responses.isEmpty)
             XCTAssertTrue(recorder.allCallbacksOnMainThread)
         }
     }
 
     @MainActor
-    func testInvalidMerchantPresentationPreservesLegacyPayload() async throws {
-        let presenter = ErrorTestPresenter()
-        let recorder = LegacyErrorRecorder()
-
-        PayHereSDK.present(from: presenter, withInitRequest: Self.makeRequest(merchantID: nil), delegate: recorder)
-
-        let error = try XCTUnwrap(recorder.errors.first) as NSError
-        XCTAssertEqual(recorder.errors.count, 1)
-        XCTAssertEqual(presenter.presentationCount, 0)
-        XCTAssertEqual(error.domain, "")
-        XCTAssertEqual(error.code, 401)
-        XCTAssertEqual(error.localizedDescription, "Invalid merchant ID")
-    }
-
-    @MainActor
     func testInvalidAmountAndMissingCurrencyFailControllerValidation() async throws {
         let previousBaseURL = PHConfigs.BASE_URL
         defer { PHConfigs.BASE_URL = previousBaseURL }
-        let cases: [(Double?, PHCurrency?, PHPaymentError.Code, String)] = [
-            (nil, .LKR, .invalidAmount, "Invalid amount"),
-            (0, .LKR, .invalidAmount, "Invalid amount"),
-            (-1, .LKR, .invalidAmount, "Invalid amount"),
-            (10, nil, .invalidCurrency, "Invalid currency")
+        let cases: [(Double?, PHCurrency?, PHPaymentError.Reason)] = [
+            (nil, .LKR, .invalidAmount),
+            (0, .LKR, .invalidAmount),
+            (-1, .LKR, .invalidAmount),
+            (10, nil, .invalidCurrency)
         ]
-        for (amount, currency, expectedCode, legacyMessage) in cases {
+        for (amount, currency, expectedReason) in cases {
             let presenter = ErrorTestPresenter()
             let recorder = TypedErrorRecorder()
             let request = Self.makeRequest(merchantID: "1210000", amount: amount, currency: currency)
@@ -392,12 +275,9 @@ final class PHPaymentErrorTests: XCTestCase {
 
             let error = try XCTUnwrap(recorder.errors.first)
             XCTAssertEqual(recorder.errors.count, 1)
-            XCTAssertEqual(error.code, expectedCode)
-            XCTAssertEqual(error.category, .integration)
-            XCTAssertEqual(error.stage, .initialization)
+            XCTAssertEqual(error.reason, expectedReason)
+            XCTAssertEqual(error.code, 401)
             XCTAssertEqual(error.message, "This payment couldn’t be started. Please contact the merchant.")
-            XCTAssertEqual((error.legacyError as NSError?)?.code, 401)
-            XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, legacyMessage)
             XCTAssertTrue(recorder.allCallbacksOnMainThread)
             XCTAssertTrue(recorder.responses.isEmpty)
         }
@@ -421,16 +301,17 @@ final class PHPaymentErrorTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyBackgroundPreflightRetainsDelegateUntilQueuedCallbackCompletes() async {
+    func testBackgroundPreflightRetainsDelegateUntilQueuedCallbackCompletes() async {
         let presenter = ErrorTestPresenter()
-        let callback = expectation(description: "Legacy preflight callback")
-        let released = expectation(description: "Temporary legacy delegate released after callback")
+        let callback = expectation(description: "Typed preflight callback")
+        let released = expectation(description: "Temporary delegate released after callback")
         let scheduled = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
-            var delegate: TemporaryLegacyErrorDelegate? = TemporaryLegacyErrorDelegate(
+            var delegate: TemporaryErrorDelegate? = TemporaryErrorDelegate(
                 onError: { error in
                     XCTAssertTrue(Thread.isMainThread)
-                    XCTAssertEqual((error as NSError).code, 401)
+                    XCTAssertEqual(error.code, 401)
+                    XCTAssertEqual(error.reason, .invalidMerchantID)
                     callback.fulfill()
                 },
                 onRelease: { released.fulfill() })
@@ -458,26 +339,18 @@ final class PHPaymentErrorTests: XCTestCase {
     }
 }
 
-private final class LegacyErrorRecorder: PayHereSDKDelegate {
-    private(set) var errors: [Error] = []
-    private(set) var responses: [PHResponse<Any>] = []
-
-    func payHereSDK(didReceive response: PHResponse<Any>) { responses.append(response) }
-    func onErrorReceived(error: Error) { errors.append(error) }
-}
-
-private final class TemporaryLegacyErrorDelegate: PayHereSDKDelegate {
-    private let onError: @Sendable (Error) -> Void
+private final class TemporaryErrorDelegate: PayHereSDKDelegate {
+    private let onError: @Sendable (PHPaymentError) -> Void
     private let onRelease: @Sendable () -> Void
 
-    init(onError: @escaping @Sendable (Error) -> Void, onRelease: @escaping @Sendable () -> Void) {
+    init(onError: @escaping @Sendable (PHPaymentError) -> Void, onRelease: @escaping @Sendable () -> Void) {
         self.onError = onError
         self.onRelease = onRelease
     }
 
     deinit { onRelease() }
-    func payHereSDK(didReceive response: PHResponse<Any>) { XCTFail("Expected the deprecated error callback") }
-    func onErrorReceived(error: Error) { onError(error) }
+    func payHereSDK(didReceive response: PHResponse<Any>) { XCTFail("Expected the typed error callback") }
+    func payHereSDK(didFailWith error: PHPaymentError) { onError(error) }
 }
 
 // All mutable state is locked, including the callback shared with the background-presentation test.
@@ -511,29 +384,11 @@ private final class TypedErrorRecorder: PayHereSDKDelegate, @unchecked Sendable 
         completion?()
     }
 
-    func onErrorReceived(error: Error) {
-        XCTFail("The typed error handler must exclusively receive payment errors")
-    }
-
     private func locked<T>(_ body: () -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
         return body()
     }
-}
-
-private final class BothErrorHandlersRecorder: PayHereSDKDelegate {
-    private(set) var modernErrorCount = 0
-    private(set) var modernResponseCount = 0
-    private(set) var legacyErrorCount = 0
-
-    func payHereSDK(didReceive response: PHResponse<Any>) {
-        modernResponseCount += 1
-    }
-    func payHereSDK(didFailWith error: PHPaymentError) {
-        modernErrorCount += 1
-    }
-    func onErrorReceived(error: Error) { legacyErrorCount += 1 }
 }
 
 private final class ErrorTestPresenter: UIViewController {
