@@ -7,12 +7,12 @@
 //
 
 import UIKit
-import payHereSDK
+import PayHereSDK
 
 class ViewController: UIViewController {
     
     let merchantID = "1211149" // <YOUR_MERCHANT_ID>
-    
+
     var initRequest : PHInitialRequest?
 
     override func viewDidLoad() {
@@ -26,7 +26,7 @@ class ViewController: UIViewController {
         let item1 = Item(id: "001", name: "PayHere Test Item 01", quantity: 1, amount: 25.00)
         let item2 = Item(id: "002", name: "PayHere Test Item 02", quantity: 2, amount: 25.0)
         
-        //MARK: CheckOut API
+        // MARK: - Checkout API
         initRequest = PHInitialRequest(merchantID: merchantID,
                                        notifyURL: "",
                                        firstName: "Pay",
@@ -48,7 +48,21 @@ class ViewController: UIViewController {
                                        custom2: "custom 02")
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Configuration applies to this presentation; both settings default to true.
+        // Set `showResultScreen` to false to handle result UI in your app.
+        // Delegate callbacks deliver outcomes with either result-screen setting.
+        // `showRetryOnResultScreen` controls Retry for final failed payment results only.
+        // It is ignored when the result screen is hidden and does not retry SDK errors.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        // To use SDK defaults, omit the configuration argument:
+        // PayHereSDK.present(from: self, withInitRequest: initRequest!, delegate: self)
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
     
     
@@ -59,7 +73,7 @@ class ViewController: UIViewController {
                           quantity: 1,
                           amount: 60.00)
         
-        //MARK: Pre Approval API
+        // MARK: - Preapproval API
         initRequest = PHInitialRequest(merchantID: merchantID,
                                        notifyURL: "",
                                        firstName: "",
@@ -78,7 +92,15 @@ class ViewController: UIViewController {
         
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional, per-presentation preferences; omit them to use the defaults shown below.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self, withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
     
     @IBAction func btnRecurringPressed(_ sender: UIButton) {
@@ -86,7 +108,7 @@ class ViewController: UIViewController {
         let item1 = Item(id: "001", name: "PayHere Test Item 01", quantity: 1, amount: 60.00)
         
         
-        //MARK: Recurring API
+        // MARK: - Recurring API
         initRequest = PHInitialRequest(
             merchantID: merchantID,
             notifyURL: "",
@@ -111,7 +133,16 @@ class ViewController: UIViewController {
             recurrence: .Month(period: 2),
             duration: .Forver)
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional, per-presentation preferences; omit them to use the defaults shown below.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self,
+                                    withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
         
     }
     
@@ -120,7 +151,7 @@ class ViewController: UIViewController {
         let item1 = Item(id: "001", name: "PayHere Test Item 01", quantity: 1, amount: 25.00)
         let item2 = Item(id: "002", name: "PayHere Test Item 02", quantity: 2, amount: 25.0)
         
-        //MARK: CheckOut API
+        // MARK: - Authorize API (hold on card)
         initRequest = PHInitialRequest(
             merchantID: merchantID,
             notifyURL: "",
@@ -147,37 +178,62 @@ class ViewController: UIViewController {
       
         
         
-        PHPrecentController.precent(from: self, withInitRequest: initRequest!, delegate: self)
+        // Optional, per-presentation preferences; omit them to use the defaults shown below.
+        let paymentConfiguration = PHPaymentConfiguration(
+            showResultScreen: true,
+            showRetryOnResultScreen: true
+        )
+
+        PayHereSDK.present(from: self,
+                                    withInitRequest: initRequest!,
+                                    configuration: paymentConfiguration,
+                                    delegate: self)
     }
 }
 
-extension ViewController : PHViewControllerDelegate{
-    
-    func onErrorReceived(error: Error) {
-        print("✋ Error",error)
+extension ViewController: PayHereSDKDelegate {
+
+    // Handle SDK errors and user actions using `code`, `category`, and `stage`.
+    // Use `message` for display. Final payment results arrive through `didReceive`.
+    // `.paymentStatusUnavailable` means the status is unknown; verify it before retrying.
+    func payHereSDK(didFailWith error: PHPaymentError) {
+        guard error.category != .userAction else {
+            print(error.message)
+            return
+        }
         
-        let ac = UIAlertController(title: "Error Occurred", message: error.localizedDescription, preferredStyle: .alert)
-        let okAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-        ac.addAction(okAction)
-        present(ac, animated: true, completion: nil)
+        showPaymentError(message: error.message)
     }
+
+ 
     
-    func onResponseReceived(response: PHResponse<Any>?) {
-        if(response?.isSuccess())!{
+    // Receives final successful, failed, or authorized payment results after dismissal.
+    // `isSuccess()` is true only for SUCCESS; inspect StatusResponse to distinguish AUTHORIZED.
+    func payHereSDK(didReceive response: PHResponse<Any>) {
+        if response.isSuccess() {
             
-            guard let resp = response?.getData() as? StatusResponse else{
+            guard let resp = response.getData() as? StatusResponse else{
         
                 return
             }
             print(resp.message ?? "" as Any)
-            //Payment Sucess
+            // Handle a successful payment using the details in `resp`.
             
         }else{
-            print(response?.getMessage() ?? "")
+            print(response.getMessage() ?? "")
+            showPaymentError(message: response.getMessage() ?? "")
             
         }
     }
     
+    private func showPaymentError(message: String) {
+        let alert = UIAlertController(title: "Payment", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
     
+    // Required for deprecated compatibility; the SDK uses the typed error callback above.
+    func onErrorReceived(error: Error) {
+        print("✋ Error",error)
+    }
 }
-
