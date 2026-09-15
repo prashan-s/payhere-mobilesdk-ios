@@ -194,10 +194,6 @@ private final class UnexpectedPaymentDelegate: PayHereSDKDelegate {
         XCTFail("Presentation must not complete the payment")
     }
 
-    func onErrorReceived(error: Error) {
-        XCTFail("Unexpected presentation error: \(error)")
-    }
-
     func payHereSDK(didFailWith error: PHPaymentError) {
         XCTFail("Unexpected presentation error: \(error)")
     }
@@ -249,8 +245,7 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .invalidResponse)
-        XCTAssertEqual(error.stage, .initialization)
+        XCTAssertEqual(error.reason, .invalidResponse)
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
         XCTAssertEqual(delegate.responseCount, 0)
@@ -271,7 +266,7 @@ final class PHPaymentControllerTests: XCTestCase {
                 let tableView = try fixture.outlet("tableView", as: UITableView.self)
                 fixture.controller.tableView(tableView, didSelectRowAt: IndexPath(row: 0, section: 0))
                 try await eventually { delegate.errorCount == 1 }
-                try assertCannotContinue(delegate, stage: .submission)
+                try assertCannotContinue(delegate)
                 XCTAssertEqual(fixture.network.requestPaths, ["/pay/api/payment/v2/init"])
             } catch {
                 await fixture.stop()
@@ -304,7 +299,7 @@ final class PHPaymentControllerTests: XCTestCase {
         DispatchQueue.global().async { callback(false) }
         try await eventually { delegate.errorCount == 1 }
 
-        try assertCannotContinue(delegate, stage: .submission)
+        try assertCannotContinue(delegate)
         callback(false)
         fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
         fixture.controller.perform(NSSelectorFromString("orderStatusTimerTicked"))
@@ -373,7 +368,7 @@ final class PHPaymentControllerTests: XCTestCase {
 
         fixture.controller.webView(webView, didFailProvisionalNavigation: initialNavigation, withError: URLError(.timedOut))
         try await eventually { delegate.errorCount == 1 }
-        try assertCannotContinue(delegate, stage: .paymentPage)
+        try assertCannotContinue(delegate)
 
         fixture.controller.webView(webView, didFail: initialNavigation, withError: URLError(.timedOut))
         fixture.controller.webViewWebContentProcessDidTerminate(webView)
@@ -383,16 +378,15 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testFirstCommittedWebFailureDeliversLegacyErrorWithoutReloadingThePage() async throws {
+    func testFirstCommittedWebFailureDeliversTypedErrorWithoutReloadingThePage() async throws {
         let fixture = try makeWebFailureFixture()
         addTeardownBlock { await fixture.stop() }
         let webView = try await enterRecordedWebPayment(fixture)
         fixture.controller.webView(webView, didFail: try XCTUnwrap(webView.navigations.last), withError: URLError(.networkConnectionLost))
         try await eventually { fixture.delegate.callbackCount == 1 }
 
-        let error = try XCTUnwrap(fixture.delegate.error as? PHPaymentError)
-        XCTAssertEqual(error.code, .paymentCannotContinue)
-        XCTAssertEqual(error.stage, .paymentPage)
+        let error = try XCTUnwrap(fixture.delegate.error)
+        XCTAssertEqual(error.reason, .paymentCannotContinue)
         XCTAssertEqual(webView.requests.count, 1)
         XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
         XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
@@ -409,7 +403,7 @@ final class PHPaymentControllerTests: XCTestCase {
         fixture.controller.webViewWebContentProcessDidTerminate(webView)
         try await eventually { delegate.errorCount == 1 }
 
-        try assertCannotContinue(delegate, stage: .paymentPage)
+        try assertCannotContinue(delegate)
         fixture.controller.webViewWebContentProcessDidTerminate(webView)
         XCTAssertEqual(delegate.errorCount, 1)
         XCTAssertEqual(webView.requests.count, 1)
@@ -440,9 +434,7 @@ final class PHPaymentControllerTests: XCTestCase {
             fixture.controller.delegate = delegate
             try await eventually { delegate.errorCount == 1 }
             let error = try XCTUnwrap(delegate.error)
-            XCTAssertEqual(error.code, .invalidResponse)
-            XCTAssertEqual(error.stage, .initialization)
-            XCTAssertEqual(error.category, .service)
+            XCTAssertEqual(error.reason, .invalidResponse)
             XCTAssertTrue(delegate.allCallbacksOnMainThread)
             XCTAssertTrue(delegate.errorArrivedAfterDismissal)
             XCTAssertEqual(delegate.responseCount, 0)
@@ -459,10 +451,9 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    private func assertCannotContinue(_ delegate: TypedControllerErrorDelegate, stage: PHPaymentError.Stage) throws {
+    private func assertCannotContinue(_ delegate: TypedControllerErrorDelegate) throws {
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .paymentCannotContinue)
-        XCTAssertEqual(error.stage, stage)
+        XCTAssertEqual(error.reason, .paymentCannotContinue)
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
         XCTAssertEqual(delegate.errorCount, 1)
@@ -511,7 +502,58 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testSubmissionRejectionWithoutURLPreservesServerMessageAndLegacyPayload() async throws {
+    func testInitializationSerializationFailurePreservesHTTPResponseCode() async throws {
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
+                                      responses: ["/pay/api/payment/v2/init": .success(Data())])
+        addTeardownBlock { await fixture.stop() }
+        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
+        fixture.controller.delegate = delegate
+
+        try await assertEmptyHTTPResponseFailure(delegate)
+    }
+
+    @MainActor
+    func testInitAndSubmitSerializationFailurePreservesHTTPResponseCode() async throws {
+        let fixture = try makeFixture(configuration: .default, api: .PreApproval,
+                                      responses: ["/pay/api/payment/initAndSubmit": .success(Data())])
+        addTeardownBlock { await fixture.stop() }
+        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
+        fixture.controller.delegate = delegate
+
+        try await assertEmptyHTTPResponseFailure(delegate)
+    }
+
+    @MainActor
+    func testSubmissionSerializationFailurePreservesHTTPResponseCode() async throws {
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
+                                      responses: ["/pay/api/payment/v2/init": .success(initializationData),
+                                                  "/pay/api/payment/submit": .success(Data())])
+        addTeardownBlock { await fixture.stop() }
+        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
+        fixture.controller.delegate = delegate
+        try await waitForPaymentMethods(fixture)
+        let method = try JSONDecoder().decode(PaymentMethod.self, from: Data("{\"method\":\"VISA\",\"submissionCode\":\"VISA\"}".utf8))
+
+        fixture.controller.didSelectedPaymentOption(paymentMethod: method, selectedSection: 1)
+
+        try await assertEmptyHTTPResponseFailure(delegate)
+    }
+
+    @MainActor
+    private func assertEmptyHTTPResponseFailure(_ delegate: TypedControllerErrorDelegate) async throws {
+        try await eventually { delegate.errorCount == 1 }
+
+        let error = try XCTUnwrap(delegate.error)
+        XCTAssertEqual(error.reason, .invalidResponse)
+        XCTAssertEqual(error.code, 200)
+        XCTAssertNil(error.serverMessage)
+        XCTAssertTrue(delegate.allCallbacksOnMainThread)
+        XCTAssertTrue(delegate.errorArrivedAfterDismissal)
+        XCTAssertEqual(delegate.responseCount, 0)
+    }
+
+    @MainActor
+    func testSubmissionRejectionWithoutURLPreservesServerMessageAndCode() async throws {
         let message = "  Please select a different payment method.\n"
         let payload = try JSONSerialization.data(withJSONObject: ["status": -8, "msg": message])
         let fixture = try makeFixture(configuration: .default, api: .CheckOut,
@@ -526,36 +568,13 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .requestRejected)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .submission)
-        XCTAssertEqual(error.serverStatusCode, -8)
+        XCTAssertEqual(error.reason, .requestRejected)
+        XCTAssertEqual(error.code, 401)
         XCTAssertEqual(Array(error.message.utf8), Array(message.utf8))
         XCTAssertEqual(error.serverMessage, message)
-        XCTAssertEqual((error.legacyError as NSError?)?.code, 401)
-        XCTAssertEqual((error.legacyError as NSError?)?.localizedDescription, "Invalid URL")
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
         XCTAssertEqual(delegate.responseCount, 0)
-    }
-
-    @MainActor
-    func testInitializationRejectionPreservesLegacyServerPayloadAfterDismissal() async throws {
-        let message = "  Original server explanation.\n"
-        let payload = try JSONSerialization.data(withJSONObject: ["status": -41, "msg": message])
-        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .success(payload)])
-        addTeardownBlock { await fixture.stop() }
-        try await eventually { fixture.delegate.callbackCount == 1 }
-
-        let error = try XCTUnwrap(fixture.delegate.error) as NSError
-        XCTAssertEqual(error.domain, "")
-        XCTAssertEqual(error.code, 501)
-        XCTAssertEqual(Array(error.localizedDescription.utf8), Array(message.utf8))
-        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        XCTAssertEqual(fixture.delegate.callbackCount, 1)
     }
 
     @MainActor
@@ -572,8 +591,9 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .checkoutClosed)
-        XCTAssertEqual(error.category, .userAction)
+        XCTAssertEqual(error.reason, .userCancelled)
+        XCTAssertEqual(error.code, 401)
+        XCTAssertEqual(error.message, "You cancelled checkout. Please check your payment status before trying again.")
         XCTAssertNil(error.serverMessage)
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
@@ -585,7 +605,65 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testMalformedInitializationResponseUsesTypedServiceErrorWithoutExposingParserText() async throws {
+    func testConfirmedExitNowReportsUserCancellationOnceAfterDismissal() async throws {
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
+                                      responses: ["/pay/api/payment/v2/init": .success(initializationData)])
+        addTeardownBlock { await fixture.stop() }
+        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
+        fixture.controller.delegate = delegate
+        try await waitForPaymentMethods(fixture)
+        try await eventually { fixture.presentationIsSettled }
+        fixture.controller.perform(NSSelectorFromString("forceClose"))
+        try await eventually { fixture.alert != nil && fixture.presentationIsSettled }
+        XCTAssertEqual(fixture.alert?.actions.map(\.title), ["Cancel", "Exit Now"])
+        XCTAssertEqual(delegate.errorCount, 0)
+
+        // Invoke the same closure path as the confirmed Exit Now action.
+        fixture.controller.finishUserClosure()
+        fixture.controller.finishUserClosure()
+        try await eventually { delegate.errorCount == 1 }
+
+        let error = try XCTUnwrap(delegate.error)
+        XCTAssertEqual(error.reason, .userCancelled)
+        XCTAssertEqual(error.code, 401)
+        XCTAssertEqual(error.message, "You cancelled checkout. Please check your payment status before trying again.")
+        XCTAssertTrue(delegate.allCallbacksOnMainThread)
+        XCTAssertTrue(delegate.errorArrivedAfterDismissal)
+        XCTAssertEqual(delegate.responseCount, 0)
+        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
+        XCTAssertEqual(delegate.errorCount, 1)
+    }
+
+    @MainActor
+    func testArrivingSuccessDismissesCancellationAlertAndSurvivesLateForcedClosure() async throws {
+        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
+                                      responses: ["/pay/api/payment/v2/init": .success(initializationData),
+                                                  "/pay/order_status": .success(Data("{\"status\":2,\"paymentNo\":123}".utf8))])
+        addTeardownBlock { await fixture.stop() }
+        try await waitForPaymentMethods(fixture)
+        try await eventually { fixture.presentationIsSettled }
+        fixture.controller.perform(NSSelectorFromString("forceClose"))
+        try await eventually { fixture.alert != nil && fixture.presentationIsSettled }
+
+        fixture.controller.perform(NSSelectorFromString("orderStatusTimerTicked"))
+        try await eventually {
+            fixture.alert == nil && fixture.presentationIsSettled &&
+                (try? fixture.outlet("viewPaymentSucess", as: UIView.self).isHidden) == false
+        }
+        XCTAssertEqual(fixture.delegate.callbackCount, 0)
+        fixture.controller.finishUserClosure()
+        fixture.controller.finishUserClosure()
+        try await eventually { fixture.delegate.callbackCount == 1 }
+
+        XCTAssertEqual((fixture.delegate.response?.getData() as? StatusResponse)?.getStatusState(), .SUCCESS)
+        XCTAssertEqual((fixture.delegate.response?.getData() as? StatusResponse)?.paymentNo, 123)
+        XCTAssertEqual(fixture.delegate.errorCount, 0)
+        XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
+        XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
+    }
+
+    @MainActor
+    func testMalformedInitializationResponseUsesTypedErrorWithoutExposingParserText() async throws {
         let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(Data("{\"status\":\"not-an-integer\"}".utf8))])
         addTeardownBlock { await fixture.stop() }
@@ -594,12 +672,9 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .invalidResponse)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .initialization)
+        XCTAssertEqual(error.reason, .invalidResponse)
         XCTAssertNil(error.serverMessage)
         XCTAssertEqual(error.message, "We couldn’t confirm the payment details. Please contact the merchant to check your payment status.")
-        XCTAssertTrue(try XCTUnwrap(error.legacyError) is DecodingError)
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
         XCTAssertEqual(delegate.responseCount, 0)
@@ -623,10 +698,7 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .paymentStatusUnavailable)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .statusCheck)
-        XCTAssertNil(error.legacyError)
+        XCTAssertEqual(error.reason, .paymentStatusUnavailable)
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
         XCTAssertTrue(delegate.errorArrivedAfterDismissal)
         XCTAssertEqual(delegate.responseCount, 0)
@@ -638,7 +710,7 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedCompletionStatusDeliversUnavailableErrorToDeprecatedHandlerOnceAfterDismissal() async throws {
+    func testFailedCompletionStatusDeliversTypedUnavailableErrorOnceAfterDismissal() async throws {
         let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),
                                                   "/pay/api/payment/submit": .success(webSubmissionData),
@@ -652,11 +724,8 @@ final class PHPaymentControllerTests: XCTestCase {
         fixture.controller.webView(webView, decidePolicyFor: action) { XCTAssertEqual($0, .allow) }
         try await eventually { fixture.delegate.callbackCount == 1 }
 
-        let error = try XCTUnwrap(fixture.delegate.error as? PHPaymentError)
-        XCTAssertEqual(error.code, .paymentStatusUnavailable)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .statusCheck)
-        XCTAssertNil(error.legacyError)
+        let error = try XCTUnwrap(fixture.delegate.error)
+        XCTAssertEqual(error.reason, .paymentStatusUnavailable)
         XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
         XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
         XCTAssertNil(fixture.delegate.response)
@@ -677,10 +746,8 @@ final class PHPaymentControllerTests: XCTestCase {
         try await eventually { delegate.errorCount == 1 }
 
         let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.code, .requestRejected)
-        XCTAssertEqual(error.category, .service)
-        XCTAssertEqual(error.stage, .initialization)
-        XCTAssertEqual(error.serverStatusCode, status)
+        XCTAssertEqual(error.reason, .requestRejected)
+        XCTAssertEqual(error.code, 501)
         XCTAssertEqual(Array(error.message.utf8), Array(message.utf8))
         XCTAssertEqual(error.serverMessage.map { Array($0.utf8) }, Array(message.utf8))
         XCTAssertTrue(delegate.allCallbacksOnMainThread)
@@ -765,6 +832,100 @@ final class PHPaymentControllerTests: XCTestCase {
         XCTAssertEqual((fixture.delegate.response?.getData() as? StatusResponse)?.message, "Declined")
         XCTAssertEqual(fixture.delegate.errorCount, 0)
         XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
+    }
+
+    @MainActor
+    func testCancelPreservesEveryKnownFinalResult() async throws {
+        try await assertKnownResultsSurviveClosure(presentationMode: .legacy) { fixture in
+            fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
+        }
+    }
+
+    @MainActor
+    func testForceClosePreservesEveryKnownFinalResultWithoutConfirmation() async throws {
+        try await assertKnownResultsSurviveClosure(presentationMode: .legacy) { fixture in
+            fixture.controller.perform(NSSelectorFromString("forceClose"))
+        }
+    }
+
+    @MainActor
+    func testBackAfterFinalResultDoesNotDiscardItBeforeDone() async throws {
+        try await assertKnownResultsSurviveClosure(presentationMode: .legacy) { fixture in
+            fixture.controller.perform(NSSelectorFromString("backButtonClicked"))
+            XCTAssertEqual(fixture.delegate.callbackCount, 0)
+            XCTAssertEqual(fixture.delegate.errorCount, 0)
+            fixture.controller.perform(NSSelectorFromString("btnDoneTapped"))
+        }
+    }
+
+    @MainActor
+    func testCustomPanPreservesEveryKnownFinalResult() async throws {
+        try await assertKnownResultsSurviveClosure(presentationMode: .legacy) { fixture in
+            fixture.controller.panGestureRegonizer(ClosingPaymentPanGesture())
+        }
+    }
+
+    @MainActor
+    func testNativeDismissalAttemptPreservesEveryKnownFinalResultWithoutConfirmation() async throws {
+        guard #available(iOS 16.0, *) else { throw XCTSkip("Native sheet dismissal requires iOS 16") }
+        try await assertKnownResultsSurviveClosure(presentationMode: .native) { fixture in
+            let sheet = try XCTUnwrap(fixture.controller.sheetPresentationController)
+            fixture.controller.presentationControllerDidAttemptToDismiss(sheet)
+        }
+    }
+
+    @MainActor
+    func testNativeDismissalPreservesEveryKnownFinalResult() async throws {
+        guard #available(iOS 16.0, *) else { throw XCTSkip("Native sheet dismissal requires iOS 16") }
+        try await assertKnownResultsSurviveClosure(presentationMode: .native) { fixture in
+            let sheet = try XCTUnwrap(fixture.controller.sheetPresentationController)
+            await withCheckedContinuation { continuation in
+                fixture.controller.dismiss(animated: false) { continuation.resume() }
+            }
+            fixture.controller.presentationControllerDidDismiss(sheet)
+        }
+    }
+
+    @MainActor
+    private func assertKnownResultsSurviveClosure(
+        presentationMode: PaymentSheetPresentationMode,
+        close: (PaymentControllerFixture) async throws -> Void
+    ) async throws {
+        for status: StatusResponse.Status in [.SUCCESS, .AUTHORIZED, .FAILED] {
+            let payload = try JSONSerialization.data(withJSONObject: [
+                "status": status.rawValue, "paymentNo": 123, "message": "Final payment response"
+            ])
+            let fixture = try makeFixture(configuration: .default, api: .CheckOut,
+                                          responses: ["/pay/api/payment/v2/init": .success(initializationData),
+                                                      "/pay/order_status": .success(payload)],
+                                          presentationMode: presentationMode)
+            addTeardownBlock { await fixture.stop() }
+            try await waitForPaymentMethods(fixture)
+            fixture.controller.perform(NSSelectorFromString("orderStatusTimerTicked"))
+            try await eventually {
+                fixture.presentationIsSettled &&
+                    (try? fixture.outlet("viewPaymentSucess", as: UIView.self).isHidden) == false
+            }
+            XCTAssertEqual(fixture.delegate.callbackCount, 0)
+
+            try await close(fixture)
+            XCTAssertNil(fixture.alert, "A confirmed final result must not show a cancellation alert")
+            try await eventually { fixture.delegate.callbackCount == 1 }
+
+            let result = try XCTUnwrap(fixture.delegate.response?.getData() as? StatusResponse)
+            XCTAssertEqual(result.getStatusState(), status)
+            XCTAssertEqual(result.paymentNo, 123)
+            XCTAssertEqual(result.message, "Final payment response")
+            XCTAssertEqual(fixture.delegate.errorCount, 0)
+            XCTAssertTrue(fixture.delegate.allCallbacksOnMainThread)
+            XCTAssertTrue(fixture.delegate.resultArrivedAfterDismissal)
+            fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
+            fixture.controller.perform(NSSelectorFromString("forceClose"))
+            fixture.controller.perform(NSSelectorFromString("btnDoneTapped"))
+            fixture.controller.perform(NSSelectorFromString("update"))
+            XCTAssertEqual(fixture.delegate.callbackCount, 1)
+            await fixture.stop()
+        }
     }
 
     @MainActor
@@ -2371,7 +2532,7 @@ private final class RecordingPaymentDelegate: PayHereSDKDelegate {
     private let lock = NSLock()
     private let isDismissed: () -> Bool
     private var receivedResponse: PHResponse<Any>?
-    private var receivedError: Error?
+    private var receivedError: PHPaymentError?
     private var responses = 0
     private var errors = 0
     private var callbacksOnMainThread = true
@@ -2381,7 +2542,7 @@ private final class RecordingPaymentDelegate: PayHereSDKDelegate {
     var callbackCount: Int { locked { responses + errors } }
     var errorCount: Int { locked { errors } }
     var response: PHResponse<Any>? { locked { receivedResponse } }
-    var error: Error? { locked { receivedError } }
+    var error: PHPaymentError? { locked { receivedError } }
     var allCallbacksOnMainThread: Bool { locked { callbacksOnMainThread } }
     var resultArrivedAfterDismissal: Bool { locked { dismissedBeforeResult } }
 
@@ -2396,7 +2557,7 @@ private final class RecordingPaymentDelegate: PayHereSDKDelegate {
         }
     }
 
-    func onErrorReceived(error: Error) {
+    func payHereSDK(didFailWith error: PHPaymentError) {
         let onMain = Thread.isMainThread
         let dismissed = onMain && isDismissed()
         locked {
@@ -2446,15 +2607,22 @@ private final class TypedControllerErrorDelegate: PayHereSDKDelegate {
         }
     }
 
-    func onErrorReceived(error: Error) {
-        XCTFail("The typed error handler must exclusively receive payment errors")
-    }
-
     private func locked<T>(_ body: () -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
         return body()
     }
+}
+
+// Exercises the completed downward swipe through the controller's gesture handler.
+@MainActor
+private final class ClosingPaymentPanGesture: UIPanGestureRecognizer {
+    override var state: UIGestureRecognizer.State {
+        get { .ended }
+        set {}
+    }
+    override func translation(in view: UIView?) -> CGPoint { .zero }
+    override func velocity(in view: UIView?) -> CGPoint { CGPoint(x: 0, y: 1_500) }
 }
 
 // Records page loads without issuing real web requests.

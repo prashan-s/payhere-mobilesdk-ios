@@ -8,19 +8,26 @@
 
 import Foundation
 
-/// A checkout event with a stable SDK code and a display message.
+/// A checkout error with a display message.
 /// Recognized server error messages are preserved verbatim; SDK-generated errors use nontechnical text.
-public struct PHPaymentError: LocalizedError {
-    public enum Code: String {
-        case checkoutClosed = "checkout_closed"
+public struct PHPaymentError: Error {
+    internal enum Reason: String {
+        // User action
+        case userCancelled = "user_cancelled"
+
+        // Integration
         case invalidMerchantID = "invalid_merchant_id"
         case invalidAmount = "invalid_amount"
         case invalidCurrency = "invalid_currency"
         case paymentViewUnavailable = "payment_view_unavailable"
+
+        // Connectivity
         case noInternet = "no_internet"
         case connectionLost = "connection_lost"
         case requestTimedOut = "request_timed_out"
         case networkFailure = "network_failure"
+
+        // Service
         case requestRejected = "request_rejected"
         case serviceUnavailable = "service_unavailable"
         case invalidResponse = "invalid_response"
@@ -29,63 +36,23 @@ public struct PHPaymentError: LocalizedError {
         case paymentCannotContinue = "payment_cannot_continue"
     }
 
-    public enum Category: String {
-        case userAction = "user_action"
-        case integration
-        case connectivity
-        case service
-    }
-
-    public enum Stage: String {
-        case presentation
-        case initialization
-        case submission
-        case paymentPage = "payment_page"
-        case result
-        case statusCheck = "status_check"
-    }
-
-    public let code: Code
-    public let stage: Stage
+    internal let reason: Reason
+    internal let code: Int?
     /// A recognized server error's original message, including empty strings. Nil means none was available.
-    public let serverMessage: String?
-    /// The server's application status, distinct from the SDK code and HTTP status.
-    public let serverStatusCode: Int?
-    public let httpStatusCode: Int?
+    internal let serverMessage: String?
 
-    // Retain the original payload exclusively for the deprecated delegate bridge.
-    internal let legacyError: Error?
-
-    internal init(code: Code, stage: Stage, serverMessage: String?,
-                  serverStatusCode: Int?, httpStatusCode: Int?, legacyError: Error?) {
+    internal init(reason: Reason, code: Int?, serverMessage: String?) {
+        self.reason = reason
         self.code = code
-        self.stage = stage
         self.serverMessage = serverMessage
-        self.serverStatusCode = serverStatusCode
-        self.httpStatusCode = httpStatusCode
-        self.legacyError = legacyError
-    }
-
-    public var category: Category {
-        switch code {
-        case .checkoutClosed:
-            return .userAction
-        case .invalidMerchantID, .invalidAmount, .invalidCurrency, .paymentViewUnavailable:
-            return .integration
-        case .noInternet, .connectionLost, .requestTimedOut, .networkFailure:
-            return .connectivity
-        case .requestRejected, .serviceUnavailable, .invalidResponse, .invalidPaymentURL,
-             .paymentStatusUnavailable, .paymentCannotContinue:
-            return .service
-        }
     }
 
     /// Use this text for display. Do not infer payment settlement or retry safety from an error.
     public var message: String {
         if let serverMessage = serverMessage { return serverMessage }
-        switch code {
-        case .checkoutClosed:
-            return "User closed the payment window."
+        switch reason {
+        case .userCancelled:
+            return "You cancelled checkout. Please check your payment status before trying again."
         case .invalidMerchantID, .invalidAmount, .invalidCurrency:
             return "This payment couldn’t be started. Please contact the merchant."
         case .paymentViewUnavailable:
@@ -99,10 +66,7 @@ public struct PHPaymentError: LocalizedError {
         case .networkFailure:
             return "We couldn’t connect to the payment service. Please check your payment status before trying again."
         case .requestRejected:
-            if stage == .submission {
-                return "We couldn’t complete this payment request. Please contact the merchant to check your payment status."
-            }
-            return "We couldn’t start this payment. Please contact the merchant."
+            return "We couldn’t complete this payment request. Please contact the merchant to check your payment status."
         case .serviceUnavailable:
             return "The payment service is temporarily unavailable. Please check your payment status before trying again."
         case .invalidResponse:
@@ -115,6 +79,4 @@ public struct PHPaymentError: LocalizedError {
             return "We couldn’t continue this payment. Please contact the merchant to check your payment status."
         }
     }
-
-    public var errorDescription: String? { message }
 }

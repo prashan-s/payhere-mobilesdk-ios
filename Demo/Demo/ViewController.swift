@@ -193,15 +193,10 @@ class ViewController: UIViewController {
 
 extension ViewController: PayHereSDKDelegate {
 
-    // Handle SDK errors and user actions using `code`, `category`, and `stage`.
-    // Use `message` for display. Final payment results arrive through `didReceive`.
-    // `.paymentStatusUnavailable` means the status is unknown; verify it before retrying.
+    // Display the public error message for SDK failures or closure before a final result.
+    // Final payment results arrive through `didReceive`; errors do not confirm failure.
+    // Verify an unknown payment status before offering another payment attempt.
     func payHereSDK(didFailWith error: PHPaymentError) {
-        guard error.category != .userAction else {
-            print(error.message)
-            return
-        }
-        
         showPaymentError(message: error.message)
     }
 
@@ -230,10 +225,5 @@ extension ViewController: PayHereSDKDelegate {
         let alert = UIAlertController(title: "Payment", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
-    }
-    
-    // Required for deprecated compatibility; the SDK uses the typed error callback above.
-    func onErrorReceived(error: Error) {
-        print("✋ Error",error)
     }
 }
