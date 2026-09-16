@@ -52,31 +52,31 @@ public struct PHPaymentError: Error {
         if let serverMessage = serverMessage { return serverMessage }
         switch reason {
         case .userCancelled:
-            return "You cancelled checkout. Please check your payment status before trying again."
+            return "Payment was not completed because the payment sheet was closed by the user."
         case .invalidMerchantID, .invalidAmount, .invalidCurrency:
-            return "This payment couldn’t be started. Please contact the merchant."
+            return "This payment couldn’t be started. - \(reason.rawValue)"
         case .paymentViewUnavailable:
             return "The payment window couldn’t be opened."
         case .noInternet:
             return "You’re not connected to the internet. Please check your connection."
         case .connectionLost:
-            return "The connection was interrupted. Please check your payment status before trying again."
+            return "The connection was interrupted."
         case .requestTimedOut:
-            return "The payment service took too long to respond. Please check your payment status before trying again."
+            return "The payment service took too long to respond."
         case .networkFailure:
-            return "We couldn’t connect to the payment service. Please check your payment status before trying again."
+            return "We couldn’t connect to the payment service."
         case .requestRejected:
-            return "We couldn’t complete this payment request. Please contact the merchant to check your payment status."
+            return "We couldn’t complete this payment request."
         case .serviceUnavailable:
-            return "The payment service is temporarily unavailable. Please check your payment status before trying again."
+            return "The payment service is temporarily unavailable."
         case .invalidResponse:
-            return "We couldn’t confirm the payment details. Please contact the merchant to check your payment status."
+            return "We couldn’t confirm the payment details."
         case .invalidPaymentURL:
             return "The payment page couldn’t be opened."
         case .paymentStatusUnavailable:
-            return "We couldn’t confirm your payment status. Please contact the merchant before trying again."
+            return "We couldn’t confirm your payment status."
         case .paymentCannotContinue:
-            return "We couldn’t continue this payment. Please contact the merchant to check your payment status."
+            return "We couldn’t continue this payment."
         }
     }
 }
