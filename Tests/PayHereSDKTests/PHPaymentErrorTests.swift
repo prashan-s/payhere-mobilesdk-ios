@@ -8,7 +8,7 @@ final class PHPaymentErrorTests: XCTestCase {
         let error = PHPaymentErrorMapper.paymentCannotContinue()
 
         XCTAssertEqual(error.reason.rawValue, "payment_cannot_continue")
-        XCTAssertEqual(error.message, "We couldn’t continue this payment. Please contact the merchant to check your payment status.")
+        XCTAssertEqual(error.message, "We couldn’t continue this payment.")
         XCTAssertNil(error.serverMessage)
         XCTAssertNil(error.code)
     }
@@ -17,7 +17,7 @@ final class PHPaymentErrorTests: XCTestCase {
         let error = PHPaymentErrorMapper.paymentStatusUnavailable()
         let bridged: Error = error
 
-        XCTAssertEqual(error.message, "We couldn’t confirm your payment status. Please contact the merchant before trying again.")
+        XCTAssertEqual(error.message, "We couldn’t confirm your payment status.")
         XCTAssertFalse(bridged is LocalizedError)
     }
 
@@ -25,7 +25,7 @@ final class PHPaymentErrorTests: XCTestCase {
         let error = PHPaymentErrorMapper.invalidInitializationResponse()
 
         XCTAssertEqual(error.reason, .invalidResponse)
-        XCTAssertEqual(error.message, "We couldn’t confirm the payment details. Please contact the merchant to check your payment status.")
+        XCTAssertEqual(error.message, "We couldn’t confirm the payment details.")
         XCTAssertNil(error.serverMessage)
         XCTAssertNil(error.code)
     }
@@ -38,7 +38,7 @@ final class PHPaymentErrorTests: XCTestCase {
         XCTAssertEqual(invalid.reason.rawValue, "invalid_amount")
         XCTAssertEqual(cancelled.code, 401)
         XCTAssertEqual(invalid.code, 401)
-        XCTAssertEqual(cancelled.message, "You cancelled checkout. Please check your payment status before trying again.")
+        XCTAssertEqual(cancelled.message, "User cancelled the attempt.")
         XCTAssertNotEqual(cancelled.message, invalid.message)
         XCTAssertNil(cancelled.serverMessage)
     }
@@ -104,7 +104,7 @@ final class PHPaymentErrorTests: XCTestCase {
         let error = PHPaymentErrorMapper.network(transport, responseCode: transport.responseCode, responseData: nil)
 
         XCTAssertEqual(error.reason, .requestRejected)
-        XCTAssertEqual(error.message, "We couldn’t complete this payment request. Please contact the merchant to check your payment status.")
+        XCTAssertEqual(error.message, "We couldn’t complete this payment request.")
     }
 
     func testHTTPRejectionPreservesRecognizedServerMessages() throws {
@@ -182,7 +182,7 @@ final class PHPaymentErrorTests: XCTestCase {
 
             XCTAssertEqual(error.reason, .serviceUnavailable)
             XCTAssertNil(error.serverMessage)
-            XCTAssertEqual(error.message, "The payment service is temporarily unavailable. Please check your payment status before trying again.")
+            XCTAssertEqual(error.message, "The payment service is temporarily unavailable.")
         }
     }
 
@@ -277,7 +277,7 @@ final class PHPaymentErrorTests: XCTestCase {
             XCTAssertEqual(recorder.errors.count, 1)
             XCTAssertEqual(error.reason, expectedReason)
             XCTAssertEqual(error.code, 401)
-            XCTAssertEqual(error.message, "This payment couldn’t be started. Please contact the merchant.")
+            XCTAssertEqual(error.message, "This payment couldn’t be started. - \(expectedReason.rawValue)")
             XCTAssertTrue(recorder.allCallbacksOnMainThread)
             XCTAssertTrue(recorder.responses.isEmpty)
         }
