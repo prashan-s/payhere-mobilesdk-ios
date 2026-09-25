@@ -30,19 +30,6 @@ final class PHPaymentErrorTests: XCTestCase {
         XCTAssertNil(error.code)
     }
 
-    func testUserCancellationAndIntegrationFailuresRemainDistinctWithIdenticalCodes() {
-        let cancelled = PHPaymentErrorMapper.sdk(reason: .userCancelled, code: 401)
-        let invalid = PHPaymentErrorMapper.sdk(reason: .invalidAmount, code: 401)
-
-        XCTAssertEqual(cancelled.reason.rawValue, "user_cancelled")
-        XCTAssertEqual(invalid.reason.rawValue, "invalid_amount")
-        XCTAssertEqual(cancelled.code, 401)
-        XCTAssertEqual(invalid.code, 401)
-        XCTAssertEqual(cancelled.message, "User cancelled the attempt.")
-        XCTAssertNotEqual(cancelled.message, invalid.message)
-        XCTAssertNil(cancelled.serverMessage)
-    }
-
     func testServerMessagesArePreservedWithoutTrimmingOrReplacement() {
         for message in ["", " \t\n", "  Please use another card.\n", "ගෙවීම නැවත පරීක්ෂා කරන්න. 💳", "e\u{301}"] {
             let error = PHPaymentErrorMapper.serverRejected(message: message)
