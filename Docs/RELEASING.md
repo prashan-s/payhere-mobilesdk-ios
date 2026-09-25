@@ -7,11 +7,12 @@ the functional test classes from `PayHereSDK-Tests` in `Demo/Demo.xcodeproj`.
 Tests run serially on an iPhone 17 Pro with iOS 26.5 and Xcode 26.6 on `macos-26`.
 Committed package resolutions are enforced. Logs and `.xcresult` bundles are
 uploaded for 14 days, including failed runs.
-CI explicitly includes lifecycle, error mapping, sheet-height policy, image
-reuse, and WebKit script tests. It excludes `PHPaymentControllerTests`, which
-exercise live view-controller presentation, redirects, dismissal, and software
-keyboard behavior. CI also rejects failed, empty, or skipped functional suites,
-so a partial run cannot pass the release gate.
+CI explicitly includes lifecycle/state, error mapping, and sheet-height policy
+tests. It excludes `PHPaymentControllerTests`, `PHPaymentImageTests`, and
+`PHCardFormLayoutTests`, which exercise live presentation, UIKit cells, WebKit,
+redirects, dismissal, or software-keyboard behavior. CI also rejects failed,
+empty, or skipped functional suites, so a partial run cannot pass the release
+gate.
 
 The shared runner configuration is in `.github/workflows/tests.yml`. Update the
 Xcode path and simulator destination together when changing toolchains.
