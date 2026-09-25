@@ -32,44 +32,32 @@ a [Conventional Commit](https://www.conventionalcommits.org/en/v1.0.0/) title:
 
 Deprecating a public API requires a minor release. Removing it requires a major
 release. Reviewers must check the actual compatibility impact; the automation
-reads commit metadata and cannot infer whether an API change is breaking.
-The highest required bump across unreleased commits wins.
+reads pull request metadata and cannot infer whether an API change is breaking.
 
-Release tracking starts at the published upstream `4.0.0` commit. Existing plain
-commit titles are not rewritten. Use conventional titles for future changes.
+`version.txt` defines the minimum release baseline. Existing stable SemVer tags
+in the repository take precedence when they are newer.
 
 ## Release flow
 
-1. Release Please maintains a release PR against `master`, updating
-   `CHANGELOG.md`, `version.txt`, and `.release-please-manifest.json`.
-2. CI is explicitly dispatched for bot-created release PRs using `GITHUB_TOKEN`.
-   This avoids needing a personal access token for automatic test runs.
-3. Review the proposed version and changelog, then merge the release PR.
-4. Release Please creates a **draft** GitHub Release targeting the release PR's
-   merge commit. It does not create a public tag at this stage.
-5. The release workflow runs the functional tests against that exact commit. Only
-   after success does it publish the draft and create the plain SemVer tag,
-   such as `4.0.1`, for Swift Package Manager.
+1. Merge a pull request into `master` with a Conventional Commit title.
+2. `fix:` selects a patch, `feat:` selects a minor, and `!` or a
+   `BREAKING CHANGE:` footer selects a major release. Other PR types do not
+   produce releases.
+3. The workflow runs functional tests against the exact merge commit.
+4. After success, it creates the plain SemVer tag and publishes the GitHub
+   Release directly. It does not create a release PR or commit version files.
 
 Running release workflows are serialized and are not canceled by newer pushes.
-An unpublished draft blocks subsequent release preparation. Test jobs have
-read-only repository access; release write permissions are confined to Ubuntu
-jobs that do not execute SDK code. Publication runs on `master` in the repository
-where the workflow is installed.
+Test jobs have read-only repository access; release write permissions are
+confined to the final Ubuntu publication job, which does not execute SDK code.
 
-If release tests or publication fail, keep the draft unpublished. Use **Re-run
-failed jobs** on the original Release run so the tested commit and draft outputs
-are preserved. If a code fix is required, close out the failed draft and create
-a new release PR for the corrected code; never retarget an existing release run
-or move a published tag. A full rerun may not rediscover a previously created
-draft because Release Please has already processed its release PR.
+If release tests or publication fail, use **Re-run failed jobs** on the original
+Release run. Publication is idempotent for the calculated tag and exact commit.
+Never retarget or move a published tag.
 
 ## Repository setup
 
 - Enable GitHub Actions and allow the pinned actions in these workflows.
-- Under **Settings → Actions → General → Workflow permissions**, enable
-  **Allow GitHub Actions to create and approve pull requests**. The workflows
-  request their own scoped token permissions; no personal token is required.
 - Require the **CI / tests / Functional tests** check for PRs to `master` using the
   check name displayed after the first CI run. Enable squash merging and keep
   conventional titles in the final squash commit.
