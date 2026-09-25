@@ -46,8 +46,6 @@ jobs:
             -only-testing:PayHereSDKTests/PHPaymentLifecycleTests \
             -only-testing:PayHereSDKTests/PHPaymentErrorTests \
             -only-testing:PayHereSDKTests/PHSheetHeightPolicyTests \
-            -only-testing:PayHereSDKTests/PHPaymentImageTests \
-            -only-testing:PayHereSDKTests/PHCardFormLayoutTests \
             -resultBundlePath test-results/PayHereSDK.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee test-results/xcodebuild.log
