@@ -7,8 +7,8 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
-# Keep preparation, testing, and publication in one serialized release run.
 concurrency:
   group: release-master
   cancel-in-progress: false
@@ -17,39 +17,89 @@ jobs:
   prepare:
     if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+    timeout-minutes: 5
     outputs:
-      created: ${{ steps.release.outputs.release_created }}
-      sha: ${{ steps.release.outputs.sha }}
-      tag: ${{ steps.release.outputs.tag_name }}
-      release-id: ${{ steps.release.outputs.id }}
+      eligible: ${{ steps.version.outputs.eligible }}
+      sha: ${{ steps.version.outputs.sha }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Require previous drafts to be resolved
+      - name: Calculate the release version
+        id: version
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const releases = await github.paginate(github.rest.repos.listReleases, {...context.repo, per_page: 100});
-            const pending = releases.filter(release => release.draft && /^\d+\.\d+\.\d+$/.test(release.tag_name));
-            if (pending.length) {
-              throw new Error(`Unpublished release draft: ${pending.map(release => release.tag_name).join(', ')}. Re-run failed jobs on its original Release run before preparing another release.`);
+            const sha = context.sha;
+            const pulls = await github.paginate(
+              github.rest.repos.listPullRequestsAssociatedWithCommit,
+              {...context.repo, commit_sha: sha, per_page: 100}
+            );
+            const pull = pulls.find(candidate =>
+              candidate.merged_at && candidate.base.ref === 'master' && candidate.merge_commit_sha === sha
+            );
+            if (!pull) {
+              core.info(`No merged master pull request is associated with ${sha}; no release required.`);
+              core.setOutput('eligible', 'false');
+              return;
             }
 
-      - name: Prepare draft release
-        id: release
-        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
-        with:
-          target-branch: master
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          skip-github-pull-request: true
+            const title = pull.title.trim();
+            const body = pull.body || '';
+            const breaking = /^[a-z]+(?:\([^)]*\))?!:/i.test(title) || /(^|\n)BREAKING[ -]CHANGE:/i.test(body);
+            const feature = /^feat(?:\([^)]*\))?:/i.test(title);
+            const fix = /^fix(?:\([^)]*\))?:/i.test(title);
+            if (!breaking && !feature && !fix) {
+              core.info(`PR #${pull.number} is not a fix, feature, or breaking change; no release required.`);
+              core.setOutput('eligible', 'false');
+              return;
+            }
+
+            const versionFile = await github.rest.repos.getContent({...context.repo, path: 'version.txt', ref: sha});
+            if (Array.isArray(versionFile.data) || versionFile.data.type !== 'file') {
+              throw new Error('version.txt must contain a stable SemVer version.');
+            }
+            const baseline = Buffer.from(versionFile.data.content, 'base64').toString('utf8').trim();
+            const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+            if (!pattern.test(baseline)) throw new Error(`Invalid version.txt value: ${baseline}`);
+
+            const tags = await github.paginate(github.rest.repos.listTags, {...context.repo, per_page: 100});
+            const versions = [baseline, ...tags.map(tag => tag.name).filter(name => pattern.test(name))];
+            const compare = (left, right) => {
+              const a = left.split('.').map(Number);
+              const b = right.split('.').map(Number);
+              return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+            };
+            const current = versions.sort(compare).at(-1);
+            let [major, minor, patch] = current.split('.').map(Number);
+            if (breaking) [major, minor, patch] = [major + 1, 0, 0];
+            else if (feature) [minor, patch] = [minor + 1, 0];
+            else patch += 1;
+            const tag = `${major}.${minor}.${patch}`;
+
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({...context.repo, tag});
+              if (existing.data.target_commitish !== sha) throw new Error(`${tag} already targets another commit.`);
+              core.info(`${tag} is already published for ${sha}.`);
+              core.setOutput('eligible', 'false');
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            try {
+              await github.rest.git.getRef({...context.repo, ref: `tags/${tag}`});
+              throw new Error(`${tag} already exists without a matching GitHub Release.`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+
+            core.setOutput('eligible', 'true');
+            core.setOutput('sha', sha);
+            core.setOutput('tag', tag);
+            core.info(`PR #${pull.number} will release ${tag} from ${sha}.`);
 
   tests:
     needs: prepare
-    if: ${{ needs.prepare.outputs.created == 'true' }}
+    if: ${{ needs.prepare.outputs.eligible == 'true' }}
     uses: ./.github/workflows/tests.yml
     with:
       ref: ${{ needs.prepare.outputs.sha }}
@@ -61,81 +111,39 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Publish the tested draft
+      - name: Publish the tested release
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-          RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
         with:
           script: |
             const sha = process.env.RELEASE_SHA;
             const tag = process.env.RELEASE_TAG;
-            const releaseID = Number(process.env.RELEASE_ID);
-            if (!Number.isSafeInteger(releaseID) || releaseID <= 0 || !/^[0-9a-f]{40}$/.test(sha) || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
-              throw new Error('Expected an immutable commit SHA and a stable SemVer tag.');
+            if (!/^[0-9a-f]{40}$/.test(sha) || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
+              throw new Error('Expected an immutable commit SHA and stable SemVer tag.');
             }
-            const {data: release} = await github.rest.repos.getRelease({...context.repo, release_id: releaseID});
-            if (release.target_commitish !== sha || release.tag_name !== tag) {
-              throw new Error('The release target or version differs from the tested draft.');
-            }
-            let existingTag;
             try {
-              existingTag = (await github.rest.git.getRef({...context.repo, ref: `tags/${tag}`})).data;
+              const existing = await github.rest.repos.getReleaseByTag({...context.repo, tag});
+              if (existing.data.target_commitish !== sha) throw new Error(`${tag} already targets another commit.`);
+              core.info(`${tag} is already published for ${sha}.`);
+              return;
             } catch (error) {
               if (error.status !== 404) throw error;
             }
-            if (!release.draft) {
-              if (existingTag?.object.type !== 'commit' || existingTag.object.sha !== sha) {
-                throw new Error('The published tag differs from the tested commit.');
-              }
-              core.info(`${tag} is already published at ${sha}.`);
-              return;
+            try {
+              await github.rest.git.getRef({...context.repo, ref: `tags/${tag}`});
+              throw new Error(`${tag} already exists without a matching GitHub Release.`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
             }
-            if (existingTag) {
-              throw new Error('The draft already has a public tag; refusing to overwrite it.');
-            }
-            await github.rest.repos.updateRelease({
+            await github.rest.repos.createRelease({
               ...context.repo,
-              release_id: release.id,
               tag_name: tag,
               target_commitish: sha,
+              name: tag,
+              generate_release_notes: true,
               draft: false,
+              prerelease: false,
             });
-            core.info(`Published ${tag} at tested commit ${sha}.`);
-
-  release-pr:
-    needs: [prepare, publish]
-    if: ${{ always() && needs.prepare.result == 'success' && (needs.prepare.outputs.created != 'true' || needs.publish.result == 'success') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      actions: write
-    steps:
-      - name: Update release PR after publication is settled
-        id: release
-        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
-        with:
-          target-branch: master
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          skip-github-release: true
-
-      # Explicit dispatch runs CI for bot PRs without a personal access token.
-      - name: Run CI for the release PR
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          RELEASE_PRS: ${{ steps.release.outputs.prs }}
-        with:
-          script: |
-            for (const pr of JSON.parse(process.env.RELEASE_PRS)) {
-              await github.rest.actions.createWorkflowDispatch({
-                ...context.repo,
-                workflow_id: 'ci.yml',
-                ref: pr.headBranchName,
-              });
-            }
+            core.info(`Published ${tag} from tested commit ${sha}.`);
