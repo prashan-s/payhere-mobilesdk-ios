@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep preparation, testing, and publication in one serialized release run.
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: ${{ github.repository == 'PayHereLK/payhere-mobilesdk-ios' && github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      release-id: ${{ steps.release.outputs.id }}
+    steps:
+      - name: Require previous drafts to be resolved
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const releases = await github.paginate(github.rest.repos.listReleases, {...context.repo, per_page: 100});
+            const pending = releases.filter(release => release.draft && /^\d+\.\d+\.\d+$/.test(release.tag_name));
+            if (pending.length) {
+              throw new Error(`Unpublished release draft: ${pending.map(release => release.tag_name).join(', ')}. Re-run failed jobs on its original Release run before preparing another release.`);
+            }
+
+      - name: Prepare draft release
+        id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        with:
+          target-branch: master
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+
+  tests:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.created == 'true' }}
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
+  publish:
+    needs: [prepare, tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the tested draft
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release-id }}
+        with:
+          script: |
+            const sha = process.env.RELEASE_SHA;
+            const tag = process.env.RELEASE_TAG;
+            const releaseID = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(releaseID) || releaseID <= 0 || !/^[0-9a-f]{40}$/.test(sha) || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
+              throw new Error('Expected an immutable commit SHA and a stable SemVer tag.');
+            }
+            const {data: release} = await github.rest.repos.getRelease({...context.repo, release_id: releaseID});
+            if (release.target_commitish !== sha || release.tag_name !== tag) {
+              throw new Error('The release target or version differs from the tested draft.');
+            }
+            let existingTag;
+            try {
+              existingTag = (await github.rest.git.getRef({...context.repo, ref: `tags/${tag}`})).data;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            if (!release.draft) {
+              if (existingTag?.object.type !== 'commit' || existingTag.object.sha !== sha) {
+                throw new Error('The published tag differs from the tested commit.');
+              }
+              core.info(`${tag} is already published at ${sha}.`);
+              return;
+            }
+            if (existingTag) {
+              throw new Error('The draft already has a public tag; refusing to overwrite it.');
+            }
+            await github.rest.repos.updateRelease({
+              ...context.repo,
+              release_id: release.id,
+              tag_name: tag,
+              target_commitish: sha,
+              draft: false,
+            });
+            core.info(`Published ${tag} at tested commit ${sha}.`);
+
+  release-pr:
+    needs: [prepare, publish]
+    if: ${{ always() && needs.prepare.result == 'success' && (needs.prepare.outputs.created != 'true' || needs.publish.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Update release PR after publication is settled
+        id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        with:
+          target-branch: master
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
+
+      # Explicit dispatch runs CI for bot PRs without a personal access token.
+      - name: Run CI for the release PR
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        with:
+          script: |
+            for (const pr of JSON.parse(process.env.RELEASE_PRS)) {
+              await github.rest.actions.createWorkflowDispatch({
+                ...context.repo,
+                workflow_id: 'ci.yml',
+                ref: pr.headBranchName,
+              });
+            }

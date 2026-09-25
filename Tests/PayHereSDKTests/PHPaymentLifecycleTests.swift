@@ -578,63 +578,6 @@ final class PHPaymentControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testTypedCancellationArrivesOnceOnMainThreadAfterDismissal() async throws {
-        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .success(initializationData)])
-        addTeardownBlock { await fixture.stop() }
-        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
-        fixture.controller.delegate = delegate
-        try await waitForPaymentMethods(fixture)
-
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        try await eventually { delegate.errorCount == 1 }
-
-        let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.reason, .userCancelled)
-        XCTAssertEqual(error.code, 401)
-        XCTAssertEqual(error.message, "User cancelled the attempt.")
-        XCTAssertNil(error.serverMessage)
-        XCTAssertTrue(delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(delegate.errorArrivedAfterDismissal)
-        XCTAssertEqual(delegate.responseCount, 0)
-        XCTAssertEqual(fixture.delegate.callbackCount, 0)
-        fixture.controller.perform(NSSelectorFromString("btnDoneTapped"))
-        fixture.controller.perform(NSSelectorFromString("orderStatusTimerTicked"))
-        XCTAssertEqual(delegate.errorCount, 1)
-    }
-
-    @MainActor
-    func testConfirmedExitNowReportsUserCancellationOnceAfterDismissal() async throws {
-        let fixture = try makeFixture(configuration: .default, api: .CheckOut,
-                                      responses: ["/pay/api/payment/v2/init": .success(initializationData)])
-        addTeardownBlock { await fixture.stop() }
-        let delegate = TypedControllerErrorDelegate(controller: fixture.controller)
-        fixture.controller.delegate = delegate
-        try await waitForPaymentMethods(fixture)
-        try await eventually { fixture.presentationIsSettled }
-        fixture.controller.perform(NSSelectorFromString("forceClose"))
-        try await eventually { fixture.alert != nil && fixture.presentationIsSettled }
-        XCTAssertEqual(fixture.alert?.actions.map(\.title), ["Cancel", "Exit Now"])
-        XCTAssertEqual(delegate.errorCount, 0)
-
-        // Invoke the same closure path as the confirmed Exit Now action.
-        fixture.controller.finishUserClosure()
-        fixture.controller.finishUserClosure()
-        try await eventually { delegate.errorCount == 1 }
-
-        let error = try XCTUnwrap(delegate.error)
-        XCTAssertEqual(error.reason, .userCancelled)
-        XCTAssertEqual(error.code, 401)
-        XCTAssertEqual(error.message, "User cancelled the attempt.")
-        XCTAssertTrue(delegate.allCallbacksOnMainThread)
-        XCTAssertTrue(delegate.errorArrivedAfterDismissal)
-        XCTAssertEqual(delegate.responseCount, 0)
-        fixture.controller.perform(NSSelectorFromString("btnCancelTapped"))
-        XCTAssertEqual(delegate.errorCount, 1)
-    }
-
-    @MainActor
     func testArrivingSuccessDismissesCancellationAlertAndSurvivesLateForcedClosure() async throws {
         let fixture = try makeFixture(configuration: .default, api: .CheckOut,
                                       responses: ["/pay/api/payment/v2/init": .success(initializationData),

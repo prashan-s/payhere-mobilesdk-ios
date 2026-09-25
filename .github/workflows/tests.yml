@@ -1,0 +1,79 @@
+name: Functional SDK tests
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    name: Functional tests
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available
+
+      - name: Run functional tests
+        run: |
+          set -o pipefail
+          mkdir -p test-results
+          xcodebuild test \
+            -project Demo/Demo.xcodeproj \
+            -scheme PayHereSDK-Tests \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
+            -destination-timeout 120 \
+            -parallel-testing-enabled NO \
+            -maximum-concurrent-test-simulator-destinations 1 \
+            -disableAutomaticPackageResolution \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -only-testing:PayHereSDKTests/PHPaymentLifecycleTests \
+            -only-testing:PayHereSDKTests/PHPaymentErrorTests \
+            -only-testing:PayHereSDKTests/PHSheetHeightPolicyTests \
+            -only-testing:PayHereSDKTests/PHPaymentImageTests \
+            -only-testing:PayHereSDKTests/PHCardFormLayoutTests \
+            -resultBundlePath test-results/PayHereSDK.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee test-results/xcodebuild.log
+
+      - name: Require the complete functional suite
+        run: |
+          xcrun xcresulttool get test-results summary \
+            --path test-results/PayHereSDK.xcresult --compact > test-results/summary.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          summary = json.loads(Path("test-results/summary.json").read_text())
+          passed = summary["passedTests"]
+          failed = summary["failedTests"]
+          skipped = summary["skippedTests"]
+          print(f"Passed: {passed}; failed: {failed}; skipped: {skipped}")
+          if passed == 0 or failed != 0 or skipped != 0:
+              raise SystemExit("The functional suite must pass without skipped tests.")
+          PY
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sdk-tests-${{ inputs.ref }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 14

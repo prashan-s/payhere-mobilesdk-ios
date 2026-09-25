@@ -351,6 +351,10 @@ In `Demo/Demo.xcodeproj`, run the `PayHereSDK-Tests` scheme on an iOS Simulator.
 
 Package-only test runs can execute the configuration and lifecycle tests. UIKit integration tests require the app host and are explicitly skipped without one.
 
+GitHub Actions runs the hosted test suite for pull requests and pushes to `master`.
+See [Tests and releases](Docs/RELEASING.md) for CI configuration, semantic versioning,
+and the automatic release process.
+
 ## Code of Conduct
 
 Participation in this project's community is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). It includes expected behavior and instructions for reporting concerns privately.
