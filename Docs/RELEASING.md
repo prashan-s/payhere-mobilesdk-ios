@@ -54,9 +54,8 @@ commit titles are not rewritten. Use conventional titles for future changes.
 Running release workflows are serialized and are not canceled by newer pushes.
 An unpublished draft blocks subsequent release preparation. Test jobs have
 read-only repository access; release write permissions are confined to Ubuntu
-jobs that do not execute SDK code. Forks run CI but cannot publish official SDK
-releases. The publication workflow is restricted to
-`PayHereLK/payhere-mobilesdk-ios` on `master`.
+jobs that do not execute SDK code. Publication runs on `master` in the repository
+where the workflow is installed.
 
 If release tests or publication fail, keep the draft unpublished. Use **Re-run
 failed jobs** on the original Release run so the tested commit and draft outputs
