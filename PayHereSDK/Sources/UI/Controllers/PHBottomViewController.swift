@@ -166,7 +166,8 @@ public class PHBottomViewController: UIViewController {
                 sheet.prefersScrollingExpandsWhenScrolledToEdge = false
                 sheet.prefersEdgeAttachedInCompactHeight = true
                 sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
-                sheet.preferredCornerRadius = 32
+                // Let UIKit match the native sheet shape for the current device and OS.
+                sheet.preferredCornerRadius = nil
                 sheet.delegate = self
                 preferredContentSize = CGSize(width: layoutContainerSize.width, height: orgHeight)
             }
@@ -188,6 +189,8 @@ public class PHBottomViewController: UIViewController {
         viewBackground.isHidden = true
         view.backgroundColor = UIColor.PrimaryTheme.ViewBackground
         bottomView.layer.cornerRadius = 0
+        // The presentation controller owns clipping at the sheet boundary.
+        bottomView.clipsToBounds = false
         bottomView.gestureRecognizers?.forEach { $0.isEnabled = false }
         NSLayoutConstraint.activate([
             bottomView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
