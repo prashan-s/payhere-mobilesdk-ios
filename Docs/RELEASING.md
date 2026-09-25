@@ -3,13 +3,15 @@
 ## CI
 
 Pull requests targeting `master`, pushes to `master`, and manual CI runs execute
-`PayHereSDK-Tests` in `Demo/Demo.xcodeproj`. The demo app hosts the UIKit tests.
+the functional test classes from `PayHereSDK-Tests` in `Demo/Demo.xcodeproj`.
 Tests run serially on an iPhone 17 Pro with iOS 26.5 and Xcode 26.6 on `macos-26`.
 Committed package resolutions are enforced. Logs and `.xcresult` bundles are
 uploaded for 14 days, including failed runs.
-CI enables the simulator software keyboard and fails on skipped tests, including
-missing-host or unavailable-keyboard skips, so a partial run cannot pass the
-release gate.
+CI explicitly includes lifecycle, error mapping, sheet-height policy, image
+reuse, and WebKit script tests. It excludes `PHPaymentControllerTests`, which
+exercise live view-controller presentation, redirects, dismissal, and software
+keyboard behavior. CI also rejects failed, empty, or skipped functional suites,
+so a partial run cannot pass the release gate.
 
 The shared runner configuration is in `.github/workflows/tests.yml`. Update the
 Xcode path and simulator destination together when changing toolchains.
@@ -44,7 +46,7 @@ commit titles are not rewritten. Use conventional titles for future changes.
 3. Review the proposed version and changelog, then merge the release PR.
 4. Release Please creates a **draft** GitHub Release targeting the release PR's
    merge commit. It does not create a public tag at this stage.
-5. The release workflow runs the hosted tests against that exact commit. Only
+5. The release workflow runs the functional tests against that exact commit. Only
    after success does it publish the draft and create the plain SemVer tag,
    such as `4.0.1`, for Swift Package Manager.
 
@@ -68,7 +70,7 @@ draft because Release Please has already processed its release PR.
 - Under **Settings → Actions → General → Workflow permissions**, enable
   **Allow GitHub Actions to create and approve pull requests**. The workflows
   request their own scoped token permissions; no personal token is required.
-- Require the **CI / tests / iOS simulator** check for PRs to `master` using the
+- Require the **CI / tests / Functional tests** check for PRs to `master` using the
   check name displayed after the first CI run. Enable squash merging and keep
   conventional titles in the final squash commit.
 

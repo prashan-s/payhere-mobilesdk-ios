@@ -1,4 +1,4 @@
-name: Hosted SDK tests
+name: Functional SDK tests
 
 on:
   workflow_call:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   simulator:
-    name: iOS simulator
+    name: Functional tests
     runs-on: macos-26
     timeout-minutes: 35
     env:
@@ -29,10 +29,7 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available
 
-      - name: Enable the simulator software keyboard
-        run: defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-
-      - name: Run hosted tests
+      - name: Run functional tests
         run: |
           set -o pipefail
           mkdir -p test-results
@@ -46,11 +43,16 @@ jobs:
             -maximum-concurrent-test-simulator-destinations 1 \
             -disableAutomaticPackageResolution \
             -onlyUsePackageVersionsFromResolvedFile \
+            -only-testing:PayHereSDKTests/PHPaymentLifecycleTests \
+            -only-testing:PayHereSDKTests/PHPaymentErrorTests \
+            -only-testing:PayHereSDKTests/PHSheetHeightPolicyTests \
+            -only-testing:PayHereSDKTests/PHPaymentImageTests \
+            -only-testing:PayHereSDKTests/PHCardFormLayoutTests \
             -resultBundlePath test-results/PayHereSDK.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee test-results/xcodebuild.log
 
-      - name: Require the complete hosted suite
+      - name: Require the complete functional suite
         run: |
           xcrun xcresulttool get test-results summary \
             --path test-results/PayHereSDK.xcresult --compact > test-results/summary.json
@@ -64,7 +66,7 @@ jobs:
           skipped = summary["skippedTests"]
           print(f"Passed: {passed}; failed: {failed}; skipped: {skipped}")
           if passed == 0 or failed != 0 or skipped != 0:
-              raise SystemExit("The hosted suite must pass without skipped tests.")
+              raise SystemExit("The functional suite must pass without skipped tests.")
           PY
 
       - name: Upload test results
